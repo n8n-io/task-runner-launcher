@@ -9,6 +9,7 @@ use libc::{c_char, chdir, getgroups, setgid, setgroups, setuid};
 use libc::{getegid, geteuid};
 use log::debug;
 use serde::Deserialize;
+use reqwest::blocking::Client;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -97,7 +98,7 @@ unsafe fn get_errno_str() -> String {
     reason_str.to_string()
 }
 
-fn launch_runner(config: TaskRunnerConfig) {
+fn launch_runner(config: TaskRunnerConfig, grant_token: Option<String>) {
     let default_envs: Vec<String> = vec!["LANG".into(), "PATH".into(), "TZ".into(), "TERM".into()];
     unsafe {
         debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
@@ -115,10 +116,16 @@ fn launch_runner(config: TaskRunnerConfig) {
 
         let command = CString::new(config.command).unwrap();
 
-        let envs = std::env::vars()
+        let mut envs = std::env::vars()
             .filter(|(name, _)| default_envs.contains(name) || config.allowed_env.contains(name))
             .map(|(name, val)| CString::new(format!("{}={}", name, val)).unwrap())
             .collect::<Vec<CString>>();
+
+        if let Some(token) = grant_token {
+            envs.retain(|env| !env.to_str().unwrap().starts_with("N8N_RUNNERS_GRANT_TOKEN="));
+            envs.push(CString::new(format!("N8N_RUNNERS_GRANT_TOKEN={}", token)).unwrap());
+        }
+
         let mut c_envs = envs
             .iter()
             .map(|env| env.as_ptr())
@@ -176,6 +183,17 @@ pub const LAUNCHER_CONFIG_PATH: &str = "./config.json";
 #[cfg(feature = "secure-mode")]
 pub const LAUNCHER_CONFIG_PATH: &str = "/etc/n8n-task-runners.json";
 
+fn fetch_grant_token(n8n_uri: &str, auth_token: &str) -> Result<String, reqwest::Error> {
+    let client = Client::new();
+    let res = client
+        .post(&format!("{}/runners/auth", n8n_uri))
+        .json(&serde_json::json!({ "token": auth_token }))
+        .send()?;
+
+    let body: serde_json::Value = res.json()?;
+    Ok(body["data"]["token"].as_str().unwrap().to_string())
+}
+
 fn main() {
     env_logger::init();
     let cli = Cli::parse();
@@ -207,10 +225,17 @@ fn main() {
     // Try escalate to root, then fail if in secure mode
     set_uid_and_gid(EXPECTED_UID, EXPECTED_GID);
 
+    let grant_token = if let Ok(auth_token) = std::env::var("N8N_RUNNERS_AUTH_TOKEN") {
+        let n8n_uri = std::env::var("N8N_RUNNERS_N8N_URI").expect("N8N_RUNNERS_N8N_URI not set");
+        Some(fetch_grant_token(&n8n_uri, &auth_token).expect("Failed to fetch grant token"))
+    } else {
+        None
+    };
+
     match cli.command {
         Commands::Launch { .. } => {
             debug!("Launching runner");
-            launch_runner(runner_config);
+            launch_runner(runner_config, grant_token);
         }
         Commands::Kill { pid, .. } => {
             debug!("Killing runner");

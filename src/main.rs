@@ -4,11 +4,13 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use libc::{c_char, chdir, getgroups, setgid, setgroups, setuid};
+use libc::{c_char, chdir, geteuid, setgid, setgroups, setuid};
 #[cfg(feature = "secure-mode")]
-use libc::{getegid, geteuid};
+use libc::{getegid, getgroups};
 use log::debug;
 use serde::Deserialize;
+use serde_json::json;
+use ureq;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -97,7 +99,7 @@ unsafe fn get_errno_str() -> String {
     reason_str.to_string()
 }
 
-fn launch_runner(config: TaskRunnerConfig) {
+fn launch_runner(config: TaskRunnerConfig, grant_token: Option<String>) {
     let default_envs: Vec<String> = vec!["LANG".into(), "PATH".into(), "TZ".into(), "TERM".into()];
     unsafe {
         debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
@@ -115,10 +117,20 @@ fn launch_runner(config: TaskRunnerConfig) {
 
         let command = CString::new(config.command).unwrap();
 
-        let envs = std::env::vars()
+        let mut envs = std::env::vars()
             .filter(|(name, _)| default_envs.contains(name) || config.allowed_env.contains(name))
             .map(|(name, val)| CString::new(format!("{}={}", name, val)).unwrap())
             .collect::<Vec<CString>>();
+
+        if let Some(token) = grant_token {
+            envs.retain(|env| {
+                !env.to_str()
+                    .unwrap()
+                    .starts_with("N8N_RUNNERS_GRANT_TOKEN=")
+            });
+            envs.push(CString::new(format!("N8N_RUNNERS_GRANT_TOKEN={}", token)).unwrap());
+        }
+
         let mut c_envs = envs
             .iter()
             .map(|env| env.as_ptr())
@@ -176,6 +188,24 @@ pub const LAUNCHER_CONFIG_PATH: &str = "./config.json";
 #[cfg(feature = "secure-mode")]
 pub const LAUNCHER_CONFIG_PATH: &str = "/etc/n8n-task-runners.json";
 
+fn fetch_grant_token(
+    n8n_uri: &str,
+    auth_token: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let url = format!("http://{}/runners/auth", n8n_uri);
+    debug!("Fetching grant token from url {}", url);
+
+    let result = ureq::post(&url).send_json(json!({ "token": auth_token }));
+
+    return match result {
+        Ok(response) => {
+            let body: serde_json::Value = response.into_json()?;
+            Ok(body["data"]["token"].as_str().unwrap().to_string())
+        }
+        Err(e) => Err(Box::new(ureq::Error::from(e))),
+    };
+}
+
 fn main() {
     env_logger::init();
     let cli = Cli::parse();
@@ -207,10 +237,28 @@ fn main() {
     // Try escalate to root, then fail if in secure mode
     set_uid_and_gid(EXPECTED_UID, EXPECTED_GID);
 
+    let grant_token = if let Ok(auth_token) = std::env::var("N8N_RUNNERS_AUTH_TOKEN") {
+        let n8n_uri = match std::env::var("N8N_RUNNERS_N8N_URI") {
+            Ok(uri) => uri,
+            Err(_) => {
+                panic!("Error: N8N_RUNNERS_N8N_URI is required when N8N_RUNNERS_AUTH_TOKEN is set");
+            }
+        };
+
+        match fetch_grant_token(&n8n_uri, &auth_token) {
+            Ok(token) => Some(token),
+            Err(e) => {
+                panic!("Error: Failed to fetch grant token: {}", e);
+            }
+        }
+    } else {
+        None
+    };
+
     match cli.command {
         Commands::Launch { .. } => {
             debug!("Launching runner");
-            launch_runner(runner_config);
+            launch_runner(runner_config, grant_token);
         }
         Commands::Kill { pid, .. } => {
             debug!("Killing runner");

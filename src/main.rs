@@ -102,8 +102,8 @@ unsafe fn get_errno_str() -> String {
 fn launch_runner(config: TaskRunnerConfig, grant_token: Option<String>) {
     let default_envs: Vec<String> = vec!["LANG".into(), "PATH".into(), "TZ".into(), "TERM".into()];
     unsafe {
-        debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
-        set_uid_and_gid(config.uid, config.gid);
+        // debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
+        // set_uid_and_gid(config.uid, config.gid);
 
         let workdir = CString::new(config.workdir.clone()).unwrap();
         if chdir(workdir.as_ptr()) != 0 {
@@ -168,8 +168,8 @@ fn launch_runner(config: TaskRunnerConfig, grant_token: Option<String>) {
 
 fn kill_runner(config: TaskRunnerConfig, pid: libc::pid_t) {
     unsafe {
-        debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
-        set_uid_and_gid(config.uid, config.gid);
+        // debug!("Setting uid ({}) and gid ({})", config.uid, config.gid);
+        // set_uid_and_gid(config.uid, config.gid);
 
         if libc::kill(pid, libc::SIGTERM) != 0 {
             panic!(
@@ -235,7 +235,7 @@ fn main() {
 
     debug!("Attempting to escalate to root");
     // Try escalate to root, then fail if in secure mode
-    set_uid_and_gid(EXPECTED_UID, EXPECTED_GID);
+    // set_uid_and_gid(EXPECTED_UID, EXPECTED_GID);
 
     let grant_token = if let Ok(auth_token) = std::env::var("N8N_RUNNERS_AUTH_TOKEN") {
         let n8n_uri = match std::env::var("N8N_RUNNERS_N8N_URI") {

@@ -1,2 +1,4 @@
-/target
-/config.json
+.DS_Store
+bin/*
+!**/.gitkeep
+config.json

@@ -21,13 +21,14 @@ const (
 )
 
 type message struct {
-	Type     string   `json:"type"`
-	Types    []string `json:"types,omitempty"`    // for runner:info
-	Name     string   `json:"name,omitempty"`     // for runner:info
-	TaskType string   `json:"taskType,omitempty"` // for runner:taskoffer
-	OfferID  string   `json:"offerId,omitempty"`  // for runner:taskoffer
-	ValidFor int      `json:"validFor,omitempty"` // for runner:taskoffer
-	TaskID   string   `json:"taskId,omitempty"`   // for broker:taskofferaccept
+	Type      string   `json:"type"`
+	Types     []string `json:"types,omitempty"`     // for runner:info
+	Name      string   `json:"name,omitempty"`      // for runner:info
+	TaskType  string   `json:"taskType,omitempty"`  // for runner:taskoffer
+	OfferID   string   `json:"offerId,omitempty"`   // for runner:taskoffer
+	ValidFor  int      `json:"validFor,omitempty"`  // for runner:taskoffer
+	TaskID    string   `json:"taskId,omitempty"`    // for broker:taskofferaccept
+	RequestID string   `json:"requestId,omitempty"` // for broker:taskofferaccept
 }
 
 type HandshakeConfig struct {
@@ -175,8 +176,9 @@ func Handshake(cfg HandshakeConfig) error {
 
 			case msgBrokerTaskOfferAccept:
 				msg := message{
-					Type:   msgRunnerTaskDeferred,
-					TaskID: msg.TaskID,
+					Type:      msgRunnerTaskDeferred,
+					TaskID:    msg.TaskID,
+					RequestID: msg.RequestID,
 				}
 
 				if err := wsConn.WriteJSON(msg); err != nil {

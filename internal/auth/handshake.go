@@ -91,7 +91,7 @@ func connectToWebsocket(wsURL *url.URL, grantToken string) (*websocket.Conn, err
 		return nil, fmt.Errorf("websocket connection failed: %w", err)
 	}
 
-	logs.Logger.Printf("Connected: %s", wsURL.String())
+	logs.Debugf("Connected: %s", wsURL.String())
 
 	return wsConn, nil
 }
@@ -112,7 +112,7 @@ func Handshake(cfg HandshakeConfig) error {
 	}
 
 	runnerID := randomID()
-	logs.Logger.Printf("Launcher's runner ID: %s", runnerID)
+	logs.Infof("Launcher's runner ID: %s", runnerID)
 
 	wsURL, err := buildWebsocketURL(cfg.N8nURI, runnerID)
 	if err != nil {
@@ -135,13 +135,13 @@ func Handshake(cfg HandshakeConfig) error {
 			err := wsConn.ReadJSON(&msg)
 			if err != nil {
 				if err == websocket.ErrReadLimit {
-					logs.Logger.Fatal("Websocket message too large for buffer - please increase buffer size")
+					logs.Errorf("Websocket message too large for buffer - please increase buffer size")
 				}
 				errReceived <- fmt.Errorf("failed to read message: %w", err)
 				return
 			}
 
-			logs.Logger.Printf("<- Received message `%s`", msg.Type)
+			logs.Debugf("<- Received message `%s`", msg.Type)
 
 			switch msg.Type {
 			case msgBrokerInfoRequest:
@@ -155,7 +155,7 @@ func Handshake(cfg HandshakeConfig) error {
 					return
 				}
 
-				logs.Logger.Printf("-> Sent message `%s`", msg.Type)
+				logs.Debugf("-> Sent message `%s`", msg.Type)
 
 			case msgBrokerRunnerRegistered:
 				msg := message{
@@ -170,8 +170,8 @@ func Handshake(cfg HandshakeConfig) error {
 					return
 				}
 
-				logs.Logger.Printf("-> Sent message `%s` for offer ID `%s`", msg.Type, msg.OfferID)
-				logs.Logger.Println("Waiting for launcher's task offer to be accepted...")
+				logs.Debugf("-> Sent message `%s` for offer ID `%s`", msg.Type, msg.OfferID)
+				logs.Info("Waiting for launcher's task offer to be accepted...")
 
 			case msgBrokerTaskOfferAccept:
 				msg := message{
@@ -184,11 +184,11 @@ func Handshake(cfg HandshakeConfig) error {
 					return
 				}
 
-				logs.Logger.Printf("-> Sent message `%s` for task ID `%s`", msg.Type, msg.TaskID)
+				logs.Debugf("-> Sent message `%s` for task ID `%s`", msg.Type, msg.TaskID)
 
 				wsConn.Close() // disregard close error, handshake already completed
 
-				logs.Logger.Printf("Disconnected: %s", wsURL.String())
+				logs.Debugf("Disconnected: %s", wsURL.String())
 
 				close(handshakeComplete)
 

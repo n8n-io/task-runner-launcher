@@ -9,13 +9,17 @@ import (
 )
 
 func main() {
+	logLevel := os.Getenv("N8N_LAUNCHER_LOG_LEVEL")
+
+	logs.SetLevel(logLevel) // default info
+
 	flag.Usage = func() {
-		logs.Logger.Printf("Usage: %s [runner-type]", os.Args[0])
+		logs.Infof("Usage: %s [runner-type]", os.Args[0])
 		flag.PrintDefaults()
 	}
 
 	if len(os.Args) < 2 {
-		logs.Logger.Fatal("Missing runner-type argument")
+		logs.Error("Missing runner-type argument")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -24,6 +28,6 @@ func main() {
 	cmd := &commands.LaunchCommand{RunnerType: runnerType}
 
 	if err := cmd.Execute(); err != nil {
-		logs.Logger.Printf("Failed to execute command: %s", err)
+		logs.Errorf("Failed to execute `launch` command: %s", err)
 	}
 }

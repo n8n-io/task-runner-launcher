@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"n8n-launcher/internal/logs"
+	"task-runner-launcher/internal/logs"
 	"net/url"
 	"strings"
 

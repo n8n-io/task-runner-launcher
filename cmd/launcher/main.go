@@ -4,8 +4,8 @@ import (
 	"flag"
 	"os"
 
-	"n8n-launcher/internal/commands"
-	"n8n-launcher/internal/logs"
+	"task-runner-launcher/internal/commands"
+	"task-runner-launcher/internal/logs"
 )
 
 func main() {

@@ -2,10 +2,10 @@ package commands
 
 import (
 	"fmt"
-	"n8n-launcher/internal/auth"
-	"n8n-launcher/internal/config"
-	"n8n-launcher/internal/env"
-	"n8n-launcher/internal/logs"
+	"task-runner-launcher/internal/auth"
+	"task-runner-launcher/internal/config"
+	"task-runner-launcher/internal/env"
+	"task-runner-launcher/internal/logs"
 	"os"
 	"os/exec"
 )

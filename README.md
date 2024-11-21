@@ -68,7 +68,7 @@ Generate a secret auth token (e.g. random string) for the launcher to authentica
 
 ### Idle timeout
 
-If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_IDLE_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
+If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
 
 ## Usage
 

@@ -15,25 +15,26 @@ type LaunchCommand struct {
 	RunnerType string
 }
 
-const defaultIdleTimeout = "15" // seconds
+const idleTimeoutEnvVar = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
+const defaultIdleTimeoutValue = "15" // seconds
 
 func (l *LaunchCommand) Execute() error {
 	logs.Logger.Println("Started executing `launch` command")
 
 	token := os.Getenv("N8N_RUNNERS_AUTH_TOKEN")
 	n8nURI := os.Getenv("N8N_RUNNERS_N8N_URI")
-	idleTimeout := os.Getenv("N8N_RUNNERS_IDLE_TIMEOUT")
+	idleTimeout := os.Getenv(idleTimeoutEnvVar)
 
 	if token == "" || n8nURI == "" {
 		return fmt.Errorf("both N8N_RUNNERS_AUTH_TOKEN and N8N_RUNNERS_N8N_URI are required")
 	}
 
 	if idleTimeout == "" {
-		os.Setenv("N8N_RUNNERS_IDLE_TIMEOUT", defaultIdleTimeout)
+		os.Setenv(idleTimeoutEnvVar, defaultIdleTimeoutValue)
 	} else {
 		idleTimeoutInt, err := strconv.Atoi(idleTimeout)
 		if err != nil || idleTimeoutInt < 0 {
-			return fmt.Errorf("N8N_RUNNERS_IDLE_TIMEOUT must be a non-negative integer")
+			return fmt.Errorf("N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT must be a non-negative integer")
 		}
 	}
 
@@ -77,7 +78,7 @@ func (l *LaunchCommand) Execute() error {
 
 	// 3. filter environment variables
 
-	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", "N8N_RUNNERS_IDLE_TIMEOUT"}
+	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", idleTimeoutEnvVar}
 	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
 	runnerEnv := env.AllowedOnly(allowedEnvs)
 

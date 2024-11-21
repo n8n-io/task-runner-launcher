@@ -66,6 +66,10 @@ Task runner config fields:
 
 Generate a secret auth token (e.g. random string) for the launcher to authenticate with the n8n main instance. You will need to pass that token as `N8N_RUNNERS_AUTH_TOKEN` to the n8n main instance and to the launcher. During the `launch` command, the launcher will exchange this auth token for a short-lived grant token from the n8n instance, and pass the grant token to the runner.
 
+### Idle timeout
+
+If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_IDLE_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
+
 ## Usage
 
 Once setup is complete, start the launcher:

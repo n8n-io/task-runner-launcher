@@ -8,20 +8,33 @@ import (
 	"n8n-launcher/internal/logs"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
 type LaunchCommand struct {
 	RunnerType string
 }
 
+const defaultIdleTimeout = "15" // seconds
+
 func (l *LaunchCommand) Execute() error {
 	logs.Logger.Println("Started executing `launch` command")
 
 	token := os.Getenv("N8N_RUNNERS_AUTH_TOKEN")
 	n8nURI := os.Getenv("N8N_RUNNERS_N8N_URI")
+	idleTimeout := os.Getenv("N8N_RUNNERS_IDLE_TIMEOUT")
 
 	if token == "" || n8nURI == "" {
 		return fmt.Errorf("both N8N_RUNNERS_AUTH_TOKEN and N8N_RUNNERS_N8N_URI are required")
+	}
+
+	if idleTimeout == "" {
+		os.Setenv("N8N_RUNNERS_IDLE_TIMEOUT", defaultIdleTimeout)
+	} else {
+		idleTimeoutInt, err := strconv.Atoi(idleTimeout)
+		if err != nil || idleTimeoutInt < 0 {
+			return fmt.Errorf("N8N_RUNNERS_IDLE_TIMEOUT must be a non-negative integer")
+		}
 	}
 
 	// 1. read configuration
@@ -49,7 +62,7 @@ func (l *LaunchCommand) Execute() error {
 	cfgNum := len(cfg.TaskRunners)
 
 	if cfgNum == 1 {
-		logs.Logger.Println("Loaded config file loaded with a single runner config")
+		logs.Logger.Println("Loaded config file with a single runner config")
 	} else {
 		logs.Logger.Printf("Loaded config file with %d runner configs", cfgNum)
 	}
@@ -64,60 +77,62 @@ func (l *LaunchCommand) Execute() error {
 
 	// 3. filter environment variables
 
-	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM"}
+	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", "N8N_RUNNERS_IDLE_TIMEOUT"}
 	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
 	runnerEnv := env.AllowedOnly(allowedEnvs)
 
 	logs.Logger.Printf("Filtered environment variables")
 
-	// 4. fetch grant token for launcher
+	for {
+		// 4. fetch grant token for launcher
 
-	launcherGrantToken, err := auth.FetchGrantToken(n8nURI, token)
-	if err != nil {
-		return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
+		launcherGrantToken, err := auth.FetchGrantToken(n8nURI, token)
+		if err != nil {
+			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
+		}
+
+		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", launcherGrantToken))
+
+		logs.Logger.Println("Fetched grant token for launcher")
+
+		// 5. connect to main and wait for task offer to be accepted
+
+		handshakeCfg := auth.HandshakeConfig{
+			TaskType:   l.RunnerType,
+			N8nURI:     n8nURI,
+			GrantToken: launcherGrantToken,
+		}
+
+		if err := auth.Handshake(handshakeCfg); err != nil {
+			return fmt.Errorf("handshake failed: %w", err)
+		}
+
+		// 6. fetch grant token for runner
+
+		runnerGrantToken, err := auth.FetchGrantToken(n8nURI, token)
+		if err != nil {
+			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
+		}
+
+		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", runnerGrantToken))
+
+		// 7. launch runner
+
+		logs.Logger.Println("Task ready for pickup, launching runner...")
+		logs.Logger.Printf("Command: %s", runnerConfig.Command)
+		logs.Logger.Printf("Args: %v", runnerConfig.Args)
+		logs.Logger.Printf("Env vars: %v", env.Keys(runnerEnv))
+
+		cmd := exec.Command(runnerConfig.Command, runnerConfig.Args...)
+		cmd.Env = runnerEnv
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err = cmd.Run()
+		if err != nil {
+			return fmt.Errorf("task runner process failed: %w", err)
+		}
+
+		logs.Logger.Printf("Runner exited on idle timeout")
 	}
-
-	runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", launcherGrantToken))
-
-	logs.Logger.Println("Fetched grant token for launcher")
-
-	// 5. connect to main and wait for task offer to be accepted
-
-	handshakeCfg := auth.HandshakeConfig{
-		TaskType:   l.RunnerType,
-		N8nURI:     n8nURI,
-		GrantToken: launcherGrantToken,
-	}
-
-	if err := auth.Handshake(handshakeCfg); err != nil {
-		return fmt.Errorf("handshake failed: %w", err)
-	}
-
-	// 6. fetch grant token for runner
-
-	runnerGrantToken, err := auth.FetchGrantToken(n8nURI, token)
-	if err != nil {
-		return fmt.Errorf("failed to fetch grant token for runner: %w", err)
-	}
-
-	runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", runnerGrantToken))
-
-	// 7. launch runner
-
-	logs.Logger.Println("Task ready for pickup, launching runner...")
-	logs.Logger.Printf("Command: %s", runnerConfig.Command)
-	logs.Logger.Printf("Args: %v", runnerConfig.Args)
-	logs.Logger.Printf("Env vars: %v", env.Keys(runnerEnv))
-
-	cmd := exec.Command(runnerConfig.Command, runnerConfig.Args...)
-	cmd.Env = runnerEnv
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to launch task runner: %w", err)
-	}
-
-	return nil
 }

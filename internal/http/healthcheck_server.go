@@ -54,7 +54,7 @@ func GetPort() int {
 		if customPort, err := strconv.Atoi(customPortStr); err == nil && customPort > 0 && customPort < 65536 {
 			return customPort
 		}
-		logs.Logger.Printf("Invalid port in %s, falling back to default port %d", portEnvVar, defaultPort)
+		logs.Logger.Printf("%s sets an invalid port, falling back to default port %d", portEnvVar, defaultPort)
 	}
 
 	return defaultPort

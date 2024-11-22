@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"os"
 
@@ -27,10 +28,13 @@ func main() {
 		logs.Logger.Printf("Starting health check server at port %d", http.GetPort())
 
 		if err := srv.ListenAndServe(); err != nil {
+			errMsg := "Health check server failed to start"
 			if opErr, ok := err.(*net.OpError); ok && opErr.Op == "listen" {
-				logs.Logger.Fatalf("Health check server failed to start: Port %d is already in use", http.GetPort())
+				errMsg = fmt.Sprintf("%s: Port %d is already in use", errMsg, http.GetPort())
+			} else {
+				errMsg = fmt.Sprintf("%s: %s", errMsg, err)
 			}
-			logs.Logger.Fatalf("Health check server failed to start: %s", err)
+			logs.Logger.Fatal(errMsg)
 		}
 	}()
 

@@ -28,7 +28,6 @@ var (
 	colorRed    = "\033[31m"
 	colorYellow = "\033[33m"
 	colorBlue   = "\033[34m"
-	colorWhite  = "\033[37m"
 	colorCyan   = "\033[36m"
 )
 
@@ -38,7 +37,6 @@ func init() {
 		colorRed = ""
 		colorYellow = ""
 		colorBlue = ""
-		colorWhite = ""
 		colorCyan = ""
 	}
 }

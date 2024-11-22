@@ -43,7 +43,7 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	}{Status: "ok"}
 
 	if err := json.NewEncoder(w).Encode(res); err != nil {
-		logs.Logger.Printf("Failed to encode health check response: %v", err)
+		logs.Errorf("Failed to encode health check response: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -54,7 +54,7 @@ func GetPort() int {
 		if customPort, err := strconv.Atoi(customPortStr); err == nil && customPort > 0 && customPort < 65536 {
 			return customPort
 		}
-		logs.Logger.Printf("%s sets an invalid port, falling back to default port %d", portEnvVar, defaultPort)
+		logs.Warnf("%s sets an invalid port, falling back to default port %d", portEnvVar, defaultPort)
 	}
 
 	return defaultPort

@@ -49,7 +49,7 @@ func WaitForN8nReady(n8nMainServerURI string) error {
 	}
 
 	if _, err := UnlimitedRetry("readiness-check", readinessCheck); err != nil {
-		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
+		return err
 	}
 
 	logs.Info("n8n instance is ready")

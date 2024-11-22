@@ -14,7 +14,7 @@ const (
 
 type RetryConfig struct {
 	// MaxRetryTime is the max time (in seconds) to retry for before giving up.
-	MaxRetryTime time.Duration // seconds
+	MaxRetryTime time.Duration
 
 	// MaxRetries is the max number of retry attempts before giving up.
 	MaxRetries int

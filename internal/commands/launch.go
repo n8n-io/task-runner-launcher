@@ -2,13 +2,13 @@ package commands
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
 	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
 	"task-runner-launcher/internal/logs"
-	"os"
-	"os/exec"
-	"strconv"
 )
 
 type LaunchCommand struct {
@@ -92,8 +92,6 @@ func (l *LaunchCommand) Execute() error {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
 
-		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", launcherGrantToken))
-
 		logs.Logger.Println("Fetched grant token for launcher")
 
 		// 5. connect to main and wait for task offer to be accepted
@@ -115,6 +113,8 @@ func (l *LaunchCommand) Execute() error {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}
 
+		logs.Logger.Println("Fetched grant token for runner")
+
 		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", runnerGrantToken))
 
 		// 7. launch runner
@@ -131,9 +131,12 @@ func (l *LaunchCommand) Execute() error {
 
 		err = cmd.Run()
 		if err != nil {
-			return fmt.Errorf("task runner process failed: %w", err)
+			logs.Logger.Printf("Runner process failed: %v", err)
+		} else {
+			logs.Logger.Printf("Runner exited on idle timeout")
 		}
 
-		logs.Logger.Printf("Runner exited on idle timeout")
+		// next runner will need to fetch a new grant token
+		runnerEnv = env.Clear(runnerEnv, "N8N_RUNNERS_GRANT_TOKEN")
 	}
 }

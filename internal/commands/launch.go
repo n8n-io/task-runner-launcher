@@ -57,7 +57,7 @@ func (l *LaunchCommand) Execute() error {
 	}
 
 	if !found {
-		return fmt.Errorf("config file does not contain requested runner type : %s", l.RunnerType)
+		return fmt.Errorf("config file does not contain requested runner type: %s", l.RunnerType)
 	}
 
 	cfgNum := len(cfg.TaskRunners)

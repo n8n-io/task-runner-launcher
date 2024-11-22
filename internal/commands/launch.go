@@ -8,6 +8,7 @@ import (
 	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
+	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
 )
 
@@ -84,8 +85,14 @@ func (l *LaunchCommand) Execute() error {
 
 	logs.Debugf("Filtered environment variables")
 
+	// 4. wait for n8n instance to be ready
+
+	if err := http.WaitForN8n(n8nURI); err != nil {
+		return fmt.Errorf("failed to wait for n8n instance to be ready: %w", err)
+	}
+
 	for {
-		// 4. fetch grant token for launcher
+		// 5. fetch grant token for launcher
 
 		launcherGrantToken, err := auth.FetchGrantToken(n8nURI, token)
 		if err != nil {
@@ -94,7 +101,7 @@ func (l *LaunchCommand) Execute() error {
 
 		logs.Debug("Fetched grant token for launcher")
 
-		// 5. connect to main and wait for task offer to be accepted
+		// 6. connect to main and wait for task offer to be accepted
 
 		handshakeCfg := auth.HandshakeConfig{
 			TaskType:   l.RunnerType,
@@ -106,7 +113,7 @@ func (l *LaunchCommand) Execute() error {
 			return fmt.Errorf("handshake failed: %w", err)
 		}
 
-		// 6. fetch grant token for runner
+		// 7. fetch grant token for runner
 
 		runnerGrantToken, err := auth.FetchGrantToken(n8nURI, token)
 		if err != nil {
@@ -117,7 +124,7 @@ func (l *LaunchCommand) Execute() error {
 
 		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", runnerGrantToken))
 
-		// 7. launch runner
+		// 8. launch runner
 
 		logs.Debug("Task ready for pickup, launching runner...")
 		logs.Debugf("Command: %s", runnerConfig.Command)

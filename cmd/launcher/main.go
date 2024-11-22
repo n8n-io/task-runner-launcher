@@ -24,12 +24,11 @@ func main() {
 
 	srv := http.NewHealthCheckServer()
 	go func() {
-		if err := srv.Start(); err != nil {
+		if err := srv.ListenAndServe(); err != nil {
 			fmt.Printf("Health check server failed to start: %s", err)
 			os.Exit(1)
 		}
 	}()
-	logs.Logger.Printf("Started healthcheck server on port %d", srv.Port)
 
 	runnerType := os.Args[1]
 	cmd := &commands.LaunchCommand{RunnerType: runnerType}

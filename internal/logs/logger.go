@@ -23,7 +23,7 @@ var levelMap = map[string]Level{
 	"error": ErrorLevel,
 }
 
-const (
+var (
 	colorReset  = "\033[0m"
 	colorRed    = "\033[31m"
 	colorYellow = "\033[33m"
@@ -31,6 +31,17 @@ const (
 	colorWhite  = "\033[37m"
 	colorCyan   = "\033[36m"
 )
+
+func init() {
+	if os.Getenv("NO_COLOR") != "" {
+		colorReset = ""
+		colorRed = ""
+		colorYellow = ""
+		colorBlue = ""
+		colorWhite = ""
+		colorCyan = ""
+	}
+}
 
 // ------------------------
 //         logger

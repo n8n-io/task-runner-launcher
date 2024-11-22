@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	launcherHttp "task-runner-launcher/internal/http"
 )
 
 type grantTokenResponse struct {
@@ -13,10 +14,7 @@ type grantTokenResponse struct {
 	} `json:"data"`
 }
 
-// FetchGrantToken exchanges the launcher's auth token for a less privileged
-// grant token returned by the n8n main instance. The launcher will later pass
-// this grant token to the task runner.
-func FetchGrantToken(n8nURI, authToken string) (string, error) {
+func fetchGrantToken(n8nURI, authToken string) (string, error) {
 	url := fmt.Sprintf("http://%s/runners/auth", n8nURI)
 
 	payload := map[string]string{"token": authToken}
@@ -44,8 +42,29 @@ func FetchGrantToken(n8nURI, authToken string) (string, error) {
 
 	var tokenResp grantTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to decode grant token response: %w", err)
 	}
 
 	return tokenResp.Data.Token, nil
+}
+
+// FetchGrantTokenWithRetry exchanges the launcher's auth token for a less
+// privileged grant token returned by the n8n main instance. This exchange is
+// retried in case the n8n main instance is temporarily unavailable.
+func FetchGrantTokenWithRetry(n8nURI, authToken string) (string, error) {
+	grantTokenFetch := func() (string, error) {
+		token, err := fetchGrantToken(n8nURI, authToken)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch grant token: %w", err)
+		}
+		return token, nil
+	}
+
+	token, err := launcherHttp.LimitedRetry("grant-token-fetch", grantTokenFetch)
+
+	if err != nil {
+		return "", fmt.Errorf("exhausted retries to fetch grant token: %w", err)
+	}
+
+	return token, nil
 }

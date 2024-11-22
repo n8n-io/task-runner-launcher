@@ -28,27 +28,27 @@ func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
 	return client.Do(req)
 }
 
-// WaitForN8n retries indefinitely until the n8n main instance is ready, i.e.
-// until its database is connected and migrated. In case of long-running
-// migrations, n8n instance readiness may take a long time.
-func WaitForN8n(n8nMainServerURI string) error {
+// WaitForN8nReadiness checks forever until the n8n main instance is ready, i.e.
+// until its DB is connected and migrated. In case of long-running migrations,
+// readiness may take a long time. Returns nil when ready.
+func WaitForN8nReadiness(n8nMainServerURI string) error {
 	logs.Info("Waiting for n8n to be ready...")
 
-	readinessCheck := func() error {
+	readinessCheck := func() (string, error) {
 		resp, err := sendReadinessRequest(n8nMainServerURI)
 		if err != nil {
-			return fmt.Errorf("failed to send readiness check request to n8n main server: %w", err)
+			return "", fmt.Errorf("n8n readiness check failed with error: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("readiness check failed with status code: %d", resp.StatusCode)
+			return "", fmt.Errorf("readiness check failed with status code: %d", resp.StatusCode)
 		}
 
-		return nil
+		return "", nil
 	}
 
-	if err := UnlimitedRetry("readiness-check", readinessCheck); err != nil {
+	if _, err := UnlimitedRetry("readiness-check", readinessCheck); err != nil {
 		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
 	}
 

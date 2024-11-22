@@ -92,14 +92,14 @@ func (l *LaunchCommand) Execute() error {
 
 	// 4. wait for n8n instance to be ready
 
-	if err := http.WaitForN8n(n8nMainServerURI); err != nil {
+	if err := http.WaitForN8nReadiness(n8nMainServerURI); err != nil {
 		return fmt.Errorf("exhausted retries while waiting for n8n instance to be ready: %w", err)
 	}
 
 	for {
 		// 5. fetch grant token for launcher
 
-		launcherGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
+		launcherGrantToken, err := auth.FetchGrantTokenWithRetry(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -120,7 +120,7 @@ func (l *LaunchCommand) Execute() error {
 
 		// 7. fetch grant token for runner
 
-		runnerGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
+		runnerGrantToken, err := auth.FetchGrantTokenWithRetry(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}

@@ -4,9 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"task-runner-launcher/internal/logs"
 	"net/url"
 	"strings"
+	"task-runner-launcher/internal/logs"
 
 	"github.com/gorilla/websocket"
 )
@@ -201,6 +201,7 @@ func Handshake(cfg HandshakeConfig) error {
 	case err := <-errReceived:
 		return err
 	case <-handshakeComplete:
+		logs.Info("Runner's task offer was accepted")
 		return nil
 	}
 }

@@ -25,14 +25,15 @@ type retryConfig struct {
 	WaitTimeBetweenRetries time.Duration
 }
 
-func retry(operationName string, operationFn func() error, cfg retryConfig) error {
+func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
 	var lastErr error
+	var zero T
 	startTime := time.Now()
 	attempt := 1
 
 	for {
 		if cfg.MaxRetryTime > 0 && time.Since(startTime) > cfg.MaxRetryTime {
-			return fmt.Errorf(
+			return zero, fmt.Errorf(
 				"gave up retrying operation `%s` on reaching max retry time %v, last error: %w",
 				operationName,
 				cfg.MaxRetryTime,
@@ -41,7 +42,7 @@ func retry(operationName string, operationFn func() error, cfg retryConfig) erro
 		}
 
 		if cfg.MaxAttempts > 0 && attempt > cfg.MaxAttempts {
-			return fmt.Errorf(
+			return zero, fmt.Errorf(
 				"gave up retrying operation `%s` on reaching max retry attempts %d, last error: %w",
 				operationName,
 				cfg.MaxAttempts,
@@ -49,9 +50,9 @@ func retry(operationName string, operationFn func() error, cfg retryConfig) erro
 			)
 		}
 
-		err := operationFn()
+		str, err := operationFn()
 		if err == nil {
-			return nil
+			return str, nil
 		}
 
 		lastErr = err
@@ -63,7 +64,7 @@ func retry(operationName string, operationFn func() error, cfg retryConfig) erro
 }
 
 // UnlimitedRetry retries an operation forever.
-func UnlimitedRetry(operationName string, operation func() error) error {
+func UnlimitedRetry[T any](operationName string, operation func() (T, error)) (T, error) {
 	return retry(operationName, operation, retryConfig{
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
@@ -72,7 +73,7 @@ func UnlimitedRetry(operationName string, operation func() error) error {
 }
 
 // LimitedRetry retries an operation until max retry time or until max attempts.
-func LimitedRetry(operationName string, operation func() error) error {
+func LimitedRetry[T any](operationName string, operation func() (T, error)) (T, error) {
 	return retry(operationName, operation, retryConfig{
 		MaxRetryTime:           defaultMaxRetryTime,
 		MaxAttempts:            defaultMaxRetries,

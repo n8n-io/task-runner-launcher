@@ -112,7 +112,9 @@ make run
 
 ## Health check
 
-The launcher exposes a health check endpoint at `/healthz` on port `5681` for liveness checks.
+The launcher exposes a health check endpoint at `/healthz` on port `5681` for liveness checks. To override the launcher health check port, set the `N8N_LAUNCHER_HEALTCHECK_PORT` env var. 
+
+If overriding the default health check port, be mindful of port conflicts - the n8n main instance uses `5678` by default for its HTTP server and `5679` for its WS server, and the runner uses `5680` by default for its WS server. 
 
 ## Release
 

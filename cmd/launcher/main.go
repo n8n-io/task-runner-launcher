@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"net"
 	"os"
 
 	"task-runner-launcher/internal/commands"
@@ -24,9 +24,13 @@ func main() {
 
 	srv := http.NewHealthCheckServer()
 	go func() {
+		logs.Logger.Printf("Starting health check server at port %d", http.GetPort())
+
 		if err := srv.ListenAndServe(); err != nil {
-			fmt.Printf("Health check server failed to start: %s", err)
-			os.Exit(1)
+			if opErr, ok := err.(*net.OpError); ok && opErr.Op == "listen" {
+				logs.Logger.Fatalf("Health check server failed to start: Port %d is already in use", http.GetPort())
+			}
+			logs.Logger.Fatalf("Health check server failed to start: %s", err)
 		}
 	}()
 

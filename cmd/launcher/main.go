@@ -29,7 +29,7 @@ func main() {
 
 	srv := http.NewHealthCheckServer()
 	go func() {
-		logs.Logger.Printf("Starting health check server at port %d", http.GetPort())
+		logs.Infof("Starting health check server at port %d", http.GetPort())
 
 		if err := srv.ListenAndServe(); err != nil {
 			errMsg := "Health check server failed to start"
@@ -38,7 +38,7 @@ func main() {
 			} else {
 				errMsg = fmt.Sprintf("%s: %s", errMsg, err)
 			}
-			logs.Logger.Fatal(errMsg)
+			logs.Error(errMsg)
 		}
 	}()
 

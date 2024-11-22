@@ -13,7 +13,6 @@ const (
 	healthCheckPath = "/healthz"
 	readTimeout     = 5 * time.Second
 	writeTimeout    = 5 * time.Second
-	shutdownTimeout = 10 * time.Second
 )
 
 func NewHealthCheckServer() *http.Server {

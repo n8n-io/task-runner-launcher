@@ -99,7 +99,7 @@ func (l *LaunchCommand) Execute() error {
 	for {
 		// 5. fetch grant token for launcher
 
-		launcherGrantToken, err := auth.FetchGrantTokenWithRetry(n8nRunnersServerURI, token)
+		launcherGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -120,7 +120,7 @@ func (l *LaunchCommand) Execute() error {
 
 		// 7. fetch grant token for runner
 
-		runnerGrantToken, err := auth.FetchGrantTokenWithRetry(n8nRunnersServerURI, token)
+		runnerGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}

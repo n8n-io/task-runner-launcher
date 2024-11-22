@@ -14,8 +14,8 @@ const (
 	defaultPort     = 5681
 	portEnvVar      = "N8N_LAUNCHER_HEALTCHECK_PORT"
 	healthCheckPath = "/healthz"
-	readTimeout     = 5 * time.Second
-	writeTimeout    = 5 * time.Second
+	readTimeout     = 1 * time.Second
+	writeTimeout    = 1 * time.Second
 )
 
 func NewHealthCheckServer() *http.Server {

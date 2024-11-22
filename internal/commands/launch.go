@@ -34,7 +34,7 @@ func (l *LaunchCommand) Execute() error {
 	} else {
 		idleTimeoutInt, err := strconv.Atoi(idleTimeout)
 		if err != nil || idleTimeoutInt < 0 {
-			return fmt.Errorf("N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT must be a non-negative integer")
+			return fmt.Errorf("%s must be a non-negative integer", idleTimeoutEnvVar)
 		}
 	}
 

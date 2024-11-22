@@ -64,8 +64,8 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 }
 
 // UnlimitedRetry retries an operation forever.
-func UnlimitedRetry[T any](operationName string, operation func() (T, error)) (T, error) {
-	return retry(operationName, operation, retryConfig{
+func UnlimitedRetry[T any](operationName string, operationFn func() (T, error)) (T, error) {
+	return retry(operationName, operationFn, retryConfig{
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
 		WaitTimeBetweenRetries: defaultWaitTimeBetweenRetries,
@@ -73,8 +73,8 @@ func UnlimitedRetry[T any](operationName string, operation func() (T, error)) (T
 }
 
 // LimitedRetry retries an operation until max retry time or until max attempts.
-func LimitedRetry[T any](operationName string, operation func() (T, error)) (T, error) {
-	return retry(operationName, operation, retryConfig{
+func LimitedRetry[T any](operationName string, operationFn func() (T, error)) (T, error) {
+	return retry(operationName, operationFn, retryConfig{
 		MaxRetryTime:           defaultMaxRetryTime,
 		MaxAttempts:            defaultMaxRetries,
 		WaitTimeBetweenRetries: defaultWaitTimeBetweenRetries,

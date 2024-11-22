@@ -2,17 +2,20 @@
 
 CLI utility to launch [n8n task runners](https://docs.n8n.io/PENDING).
 
-```sh
-./task-runner-launcher launch -type javascript
-2024/11/15 13:53:33 Starting to execute `launch` command...
-2024/11/15 13:53:33 Loaded config file loaded with a single runner config
-2024/11/15 13:53:33 Changed into working directory: /Users/ivov/Development/task-runner-launcher/bin
-2024/11/15 13:53:33 Filtered environment variables
-2024/11/15 13:53:33 Authenticated with n8n main instance
-2024/11/15 13:53:33 Launching runner...
-2024/11/15 13:53:33 Command: /usr/local/bin/node
-2024/11/15 13:53:33 Args: [/Users/ivov/Development/n8n/packages/@n8n/task-runner/dist/start.js]
-2024/11/15 13:53:33 Env vars: [LANG PATH TERM N8N_RUNNERS_N8N_URI N8N_RUNNERS_GRANT_TOKEN]
+```
+./task-runner-launcher javascript
+2024/11/21 09:51:08 INFO  Starting to execute `launch` command
+2024/11/21 09:51:08 DEBUG Loaded config file loaded with a single runner config
+2024/11/21 09:51:08 DEBUG Changed into working directory: /Users/ivov/Development/task-runner-launcher/bin
+2024/11/21 09:51:08 DEBUG Filtered environment variables
+2024/11/21 09:51:08 DEBUG Fetched grant token for launcher
+2024/11/21 09:51:08 INFO  Launcher's runner ID: 1a261be237a38f6d
+2024/11/21 09:51:08 DEBUG Connected: ws://127.0.0.1:5679/runners/_ws?id=1a261be237a38f6d
+2024/11/21 09:51:08 DEBUG <- Received message `broker:inforequest`
+2024/11/21 09:51:08 DEBUG -> Sent message `runner:info`
+2024/11/21 09:51:08 DEBUG <- Received message `broker:runnerregistered`
+2024/11/21 09:51:08 DEBUG -> Sent message `runner:taskoffer` for offer ID `d67a6d5855d4876d`
+2024/11/21 09:51:08 INFO  Waiting for launcher's task offer to be accepted...
 ```
 
 ## Setup
@@ -66,6 +69,14 @@ Task runner config fields:
 
 Generate a secret auth token (e.g. random string) for the launcher to authenticate with the n8n main instance. You will need to pass that token as `N8N_RUNNERS_AUTH_TOKEN` to the n8n main instance and to the launcher. During the `launch` command, the launcher will exchange this auth token for a short-lived grant token from the n8n instance, and pass the grant token to the runner.
 
+### Launcher logs
+
+To control the launcher's log level, set the `N8N_LAUNCHER_LOG_LEVEL` env var to `debug`, `info`, `warn` or `error`. Default is `info`.
+
+### Idle timeout
+
+If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
+
 ## Usage
 
 Once setup is complete, start the launcher:
@@ -104,6 +115,7 @@ pnpm start
 5. Build and run launcher:
 
 ```sh
+export N8N_LAUNCHER_LOG_LEVEL=debug
 export N8N_RUNNERS_N8N_URI=...
 export N8N_RUNNERS_AUTH_TOKEN=...
 

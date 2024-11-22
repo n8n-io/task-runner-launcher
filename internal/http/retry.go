@@ -39,7 +39,7 @@ func Retry(operation func() error, cfg RetryConfig) error {
 
 	for attempt := 1; attempt <= cfg.MaxRetries; attempt++ {
 		if time.Since(startTime) > cfg.MaxRetryTime {
-			return fmt.Errorf("operation timed out after %v: %w", cfg.MaxRetryTime, lastErr)
+			return fmt.Errorf("operation reached max retry time %v: %w", cfg.MaxRetryTime, lastErr)
 		}
 
 		err := operation()
@@ -55,5 +55,5 @@ func Retry(operation func() error, cfg RetryConfig) error {
 		}
 	}
 
-	return fmt.Errorf("operation failed after %d attempts: %w", cfg.MaxRetries, lastErr)
+	return fmt.Errorf("operation failed after %d retry attempts: %w", cfg.MaxRetries, lastErr)
 }

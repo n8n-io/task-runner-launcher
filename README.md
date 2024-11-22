@@ -107,8 +107,8 @@ sudo mv config.json /etc/n8n-task-runners.json
 ```sh
 export N8N_RUNNERS_ENABLED=true
 export N8N_RUNNERS_MODE=external 
-export N8N_RUNNERS_LAUNCHER_PATH=...
-export N8N_RUNNERS_AUTH_TOKEN=...
+export N8N_RUNNERS_LAUNCHER_PATH=...  # i.e. path/to/launcher/binary
+export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. random string
 pnpm start
 ```
 
@@ -116,8 +116,9 @@ pnpm start
 
 ```sh
 export N8N_LAUNCHER_LOG_LEVEL=debug
-export N8N_RUNNERS_N8N_URI=...
-export N8N_RUNNERS_AUTH_TOKEN=...
+export N8N_RUNNERS_N8N_URI=...        # e.g. http://127.0.0.1:5679
+export N8N_MAIN_URI=...               # e.g. http://127.0.0.1:5678
+export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. same as in step 4
 
 make run
 ```

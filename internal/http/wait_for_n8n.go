@@ -8,7 +8,14 @@ import (
 	"time"
 )
 
-func getRequest(url string) (*http.Response, error) {
+func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
+	baseURL := n8nMainServerURI
+	if !strings.HasPrefix(n8nMainServerURI, "http://") && !strings.HasPrefix(n8nMainServerURI, "https://") {
+		baseURL = "http://" + n8nMainServerURI
+	}
+
+	url := fmt.Sprintf("%s/healthz/readiness", baseURL)
+
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -21,37 +28,28 @@ func getRequest(url string) (*http.Response, error) {
 	return client.Do(req)
 }
 
-func buildTaskRunnerServerHealthCheckURL(n8nURI string) string {
-	baseURL := n8nURI
-	if !strings.HasPrefix(n8nURI, "http://") && !strings.HasPrefix(n8nURI, "https://") {
-		baseURL = "http://" + n8nURI
-	}
-	return fmt.Sprintf("%s/runners/healthz", baseURL)
-}
+// WaitForN8n retries indefinitely until the n8n main instance is ready, i.e.
+// until its database is connected and migrated. In case of long-running
+// migrations, n8n instance readiness may take a long time.
+func WaitForN8n(n8nMainServerURI string) error {
+	logs.Info("Waiting for n8n to be ready...")
 
-// WaitForN8n waits until the task runner server in the n8n main instance is
-// ready, following a retry logic. Returns nil if ready, or error on giving up.
-func WaitForN8n(n8nURI string) error {
-	logs.Info("Waiting for n8n instance to be ready...")
-
-	operation := func() error {
-		url := buildTaskRunnerServerHealthCheckURL(n8nURI)
-		resp, err := getRequest(url)
+	readinessCheck := func() error {
+		resp, err := sendReadinessRequest(n8nMainServerURI)
 		if err != nil {
-			return fmt.Errorf("health check request failed: %w", err)
+			return fmt.Errorf("failed to send readiness check request to n8n main server: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("health check failed with status code: %d", resp.StatusCode)
+			return fmt.Errorf("readiness check failed with status code: %d", resp.StatusCode)
 		}
 
 		return nil
 	}
 
-	retryCfg := DefaultRetryConfig()
-	if err := Retry(operation, retryCfg); err != nil {
-		return fmt.Errorf("n8n instance not reachable after exhausting retries: %w", err)
+	if err := UnlimitedRetry("readiness-check", readinessCheck); err != nil {
+		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
 	}
 
 	logs.Info("n8n instance is ready")

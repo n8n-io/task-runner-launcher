@@ -23,11 +23,16 @@ func (l *LaunchCommand) Execute() error {
 	logs.Info("Starting to execute `launch` command")
 
 	token := os.Getenv("N8N_RUNNERS_AUTH_TOKEN")
-	n8nURI := os.Getenv("N8N_RUNNERS_N8N_URI")
+	n8nRunnersServerURI := os.Getenv("N8N_RUNNERS_N8N_URI")
+	n8nMainServerURI := os.Getenv("N8N_MAIN_URI")
 	idleTimeout := os.Getenv(idleTimeoutEnvVar)
 
-	if token == "" || n8nURI == "" {
+	if token == "" || n8nRunnersServerURI == "" {
 		return fmt.Errorf("both N8N_RUNNERS_AUTH_TOKEN and N8N_RUNNERS_N8N_URI are required")
+	}
+
+	if n8nMainServerURI == "" {
+		return fmt.Errorf("N8N_MAIN_URI is required")
 	}
 
 	if idleTimeout == "" {
@@ -87,14 +92,14 @@ func (l *LaunchCommand) Execute() error {
 
 	// 4. wait for n8n instance to be ready
 
-	if err := http.WaitForN8n(n8nURI); err != nil {
+	if err := http.WaitForN8n(n8nMainServerURI); err != nil {
 		return fmt.Errorf("exhausted retries while waiting for n8n instance to be ready: %w", err)
 	}
 
 	for {
 		// 5. fetch grant token for launcher
 
-		launcherGrantToken, err := auth.FetchGrantToken(n8nURI, token)
+		launcherGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -105,7 +110,7 @@ func (l *LaunchCommand) Execute() error {
 
 		handshakeCfg := auth.HandshakeConfig{
 			TaskType:   l.RunnerType,
-			N8nURI:     n8nURI,
+			N8nURI:     n8nRunnersServerURI,
 			GrantToken: launcherGrantToken,
 		}
 
@@ -115,7 +120,7 @@ func (l *LaunchCommand) Execute() error {
 
 		// 7. fetch grant token for runner
 
-		runnerGrantToken, err := auth.FetchGrantToken(n8nURI, token)
+		runnerGrantToken, err := auth.FetchGrantToken(n8nRunnersServerURI, token)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}

@@ -73,6 +73,10 @@ Generate a secret auth token (e.g. random string) for the launcher to authentica
 
 To control the launcher's log level, set the `N8N_LAUNCHER_LOG_LEVEL` env var to `debug`, `info`, `warn` or `error`. Default is `info`.
 
+### Idle timeout
+
+If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
+
 ## Usage
 
 Once setup is complete, start the launcher:

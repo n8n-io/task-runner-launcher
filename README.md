@@ -110,6 +110,10 @@ export N8N_RUNNERS_AUTH_TOKEN=...
 make run
 ```
 
+## Health check
+
+The launcher exposes a health check endpoint at `/healthz` on port `5681` for liveness checks.
+
 ## Release
 
 1. Create a git tag following semver:

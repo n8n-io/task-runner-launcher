@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/retry"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func WaitForN8nReady(n8nMainServerURI string) error {
 		return "", nil
 	}
 
-	if _, err := UnlimitedRetry("readiness-check", readinessCheck); err != nil {
+	if _, err := retry.UnlimitedRetry("readiness-check", readinessCheck); err != nil {
 		return err
 	}
 

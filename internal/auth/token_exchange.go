@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	launcherHttp "task-runner-launcher/internal/http"
+	"task-runner-launcher/internal/retry"
 )
 
 type grantTokenResponse struct {
@@ -60,7 +60,7 @@ func FetchGrantToken(n8nURI, authToken string) (string, error) {
 		return token, nil
 	}
 
-	token, err := launcherHttp.LimitedRetry("grant-token-fetch", grantTokenFetch)
+	token, err := retry.LimitedRetry("grant-token-fetch", grantTokenFetch)
 
 	if err != nil {
 		return "", fmt.Errorf("exhausted retries to fetch grant token: %w", err)

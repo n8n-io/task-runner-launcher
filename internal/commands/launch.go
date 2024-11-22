@@ -88,7 +88,7 @@ func (l *LaunchCommand) Execute() error {
 	// 4. wait for n8n instance to be ready
 
 	if err := http.WaitForN8n(n8nURI); err != nil {
-		return fmt.Errorf("failed to wait for n8n instance to be ready: %w", err)
+		return fmt.Errorf("exhausted retries while waiting for n8n instance to be ready: %w", err)
 	}
 
 	for {

@@ -28,10 +28,10 @@ func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
 	return client.Do(req)
 }
 
-// WaitForN8nReadiness checks forever until the n8n main instance is ready, i.e.
+// WaitForN8nReady checks forever until the n8n main instance is ready, i.e.
 // until its DB is connected and migrated. In case of long-running migrations,
 // readiness may take a long time. Returns nil when ready.
-func WaitForN8nReadiness(n8nMainServerURI string) error {
+func WaitForN8nReady(n8nMainServerURI string) error {
 	logs.Info("Waiting for n8n to be ready...")
 
 	readinessCheck := func() (string, error) {

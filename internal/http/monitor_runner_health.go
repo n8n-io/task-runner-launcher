@@ -89,7 +89,6 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
 						logs.Errorf("Failed to terminate runner process: %v", err)
 						// @TODO: How to handle this?
 					}
-					<-done
 					return // stop monitoring
 				}
 			}

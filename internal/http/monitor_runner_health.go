@@ -64,7 +64,7 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
 		done := make(chan struct{})
 
 		go func() {
-			cmd.Wait()
+			_ = cmd.Wait() // disregard error - either idle timeout or termination due to unresponsiveness
 			close(done)
 		}()
 

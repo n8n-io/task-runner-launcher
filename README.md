@@ -116,9 +116,11 @@ pnpm start
 
 ```sh
 export N8N_LAUNCHER_LOG_LEVEL=debug
-export N8N_RUNNERS_N8N_URI=...        # e.g. http://127.0.0.1:5679
 export N8N_MAIN_URI=...               # e.g. http://127.0.0.1:5678
+export N8N_RUNNERS_N8N_URI=...        # e.g. http://127.0.0.1:5679
+export N8N_RUNNER_URI=...             # e.g. http://127.0.0.1:5680
 export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. same string as in step 4
+export N8N_RUNNERS_SERVER_ENABLED=true
 
 make run
 ```

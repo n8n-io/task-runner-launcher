@@ -1,8 +1,59 @@
 package env
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
+)
+
+const (
+	// ------------------------
+	//          auth
+	// ------------------------
+
+	// EnvVarAuthToken is the env var for the auth token sent by the launcher to
+	// the main instance in exchange for a single-use grant token.
+	// nolint:gosec // G101: False positive
+	EnvVarAuthToken = "N8N_RUNNERS_AUTH_TOKEN"
+
+	// EnvVarGrantToken is the env var for the single-use grant token returned by
+	// the main instance to the launcher in exchange for the auth token.
+	// nolint:gosec // G101: False positive
+	EnvVarGrantToken = "N8N_RUNNERS_GRANT_TOKEN"
+
+	// ------------------------
+	//        n8n main
+	// ------------------------
+
+	// EnvVarMainServerURI is the env var for the URI of the n8n main instance's
+	// main server.
+	EnvVarMainServerURI = "N8N_MAIN_URI"
+
+	// EnvVarMainRunnerServerURI is the env var for the URI of the n8n main
+	// instance's runner server.
+	EnvVarMainRunnerServerURI = "N8N_RUNNERS_N8N_URI"
+
+	// ------------------------
+	//         runner
+	// ------------------------
+
+	// EnvVarRunnerServerURI is the env var for the n8n runner server URI. Do not
+	// confuse with `N8N_RUNNERS_N8N_URI`.
+	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
+
+	// EnvVarRunnerServerEnabled is the env var for whether the runner's health
+	// check server should be started.
+	EnvVarRunnerServerEnabled = "N8N_RUNNERS_SERVER_ENABLED"
+
+	// EnvVarIdleTimeout is the env var for how long (in seconds) a runner may be
+	// idle for before exit.
+	EnvVarIdleTimeout = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
+)
+
+const (
+	defaultIdleTimeoutValue = 15 // seconds
 )
 
 // AllowedOnly filters the current environment down to only those
@@ -49,4 +100,62 @@ func Clear(envVars []string, envVarName string) []string {
 	}
 
 	return result
+}
+
+// Config holds validated environment variable values.
+type Config struct {
+	AuthToken           string
+	MainServerURI       string
+	MainRunnerServerURI string
+	RunnerServerURI     string
+	RunnerServerEnabled bool
+	IdleTimeout         int
+}
+
+// FromEnv retrieves vars from the environment, validates their values, and
+// returns a Config holding the validated values, or a slice of errors.
+func FromEnv() (*Config, error) {
+	var errs []error
+
+	authToken := os.Getenv(EnvVarAuthToken)
+	mainServerURI := os.Getenv(EnvVarMainServerURI)
+	mainRunnerServerURI := os.Getenv(EnvVarMainRunnerServerURI)
+	runnerServerURI := os.Getenv(EnvVarRunnerServerURI)
+	runnerServerEnabled := os.Getenv(EnvVarRunnerServerEnabled)
+	idleTimeout := os.Getenv(EnvVarIdleTimeout)
+
+	if authToken == "" {
+		errs = append(errs, fmt.Errorf("%s is required", EnvVarAuthToken))
+	}
+	if mainRunnerServerURI == "" {
+		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainRunnerServerURI))
+	}
+	if mainServerURI == "" {
+		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
+	}
+	if runnerServerEnabled != "true" {
+		errs = append(errs, fmt.Errorf("%s is required to be 'true'", EnvVarRunnerServerEnabled))
+	}
+
+	idleTimeoutInt := defaultIdleTimeoutValue
+	if idleTimeout != "" {
+		var err error
+		idleTimeoutInt, err = strconv.Atoi(idleTimeout)
+		if err != nil || idleTimeoutInt < 0 {
+			errs = append(errs, fmt.Errorf("%s must be a non-negative integer", EnvVarIdleTimeout))
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	return &Config{
+		AuthToken:           authToken,
+		MainServerURI:       mainServerURI,
+		MainRunnerServerURI: mainRunnerServerURI,
+		RunnerServerURI:     runnerServerURI,
+		RunnerServerEnabled: true,
+		IdleTimeout:         idleTimeoutInt,
+	}, nil
 }

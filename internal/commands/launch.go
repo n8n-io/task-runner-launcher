@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
@@ -16,37 +15,19 @@ type LaunchCommand struct {
 	RunnerType string
 }
 
-const idleTimeoutEnvVar = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
-const defaultIdleTimeoutValue = "15" // seconds
-
 func (l *LaunchCommand) Execute() error {
 	logs.Info("Starting to execute `launch` command")
 
-	authToken := os.Getenv("N8N_RUNNERS_AUTH_TOKEN")
-	n8nRunnerServerURI := os.Getenv("N8N_RUNNERS_N8N_URI")
-	n8nMainServerURI := os.Getenv("N8N_MAIN_URI")
-	idleTimeout := os.Getenv(idleTimeoutEnvVar)
+	// 0. validate env vars
 
-	if authToken == "" || n8nRunnerServerURI == "" {
-		return fmt.Errorf("both N8N_RUNNERS_AUTH_TOKEN and N8N_RUNNERS_N8N_URI are required")
-	}
-
-	if n8nMainServerURI == "" {
-		return fmt.Errorf("N8N_MAIN_URI is required")
-	}
-
-	if idleTimeout == "" {
-		os.Setenv(idleTimeoutEnvVar, defaultIdleTimeoutValue)
-	} else {
-		idleTimeoutInt, err := strconv.Atoi(idleTimeout)
-		if err != nil || idleTimeoutInt < 0 {
-			return fmt.Errorf("%s must be a non-negative integer", idleTimeoutEnvVar)
-		}
+	envCfg, err := env.FromEnv()
+	if err != nil {
+		return fmt.Errorf("env vars failed validation: %w", err)
 	}
 
 	// 1. read configuration
 
-	cfg, err := config.ReadConfig()
+	jsonCfg, err := config.ReadConfig()
 	if err != nil {
 		logs.Errorf("Error reading config: %v", err)
 		return err
@@ -54,7 +35,7 @@ func (l *LaunchCommand) Execute() error {
 
 	var runnerConfig config.TaskRunnerConfig
 	found := false
-	for _, r := range cfg.TaskRunners {
+	for _, r := range jsonCfg.TaskRunners {
 		if r.RunnerType == l.RunnerType {
 			runnerConfig = r
 			found = true
@@ -66,12 +47,12 @@ func (l *LaunchCommand) Execute() error {
 		return fmt.Errorf("config file does not contain requested runner type: %s", l.RunnerType)
 	}
 
-	cfgNum := len(cfg.TaskRunners)
+	jsonCfgNum := len(jsonCfg.TaskRunners)
 
-	if cfgNum == 1 {
+	if jsonCfgNum == 1 {
 		logs.Debug("Loaded config file loaded with a single runner config")
 	} else {
-		logs.Debugf("Loaded config file with %d runner configs", cfgNum)
+		logs.Debugf("Loaded config file with %d runner configs", jsonCfgNum)
 	}
 
 	// 2. change into working directory
@@ -84,7 +65,7 @@ func (l *LaunchCommand) Execute() error {
 
 	// 3. filter environment variables
 
-	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", idleTimeoutEnvVar}
+	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", env.EnvVarIdleTimeout, env.EnvVarRunnerServerEnabled}
 	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
 	runnerEnv := env.AllowedOnly(allowedEnvs)
 
@@ -92,14 +73,14 @@ func (l *LaunchCommand) Execute() error {
 
 	// 4. wait for n8n instance to be ready
 
-	if err := http.WaitForN8nReady(n8nMainServerURI); err != nil {
+	if err := http.WaitForN8nReady(envCfg.MainServerURI); err != nil {
 		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
 	}
 
 	for {
 		// 5. fetch grant token for launcher
 
-		launcherGrantToken, err := auth.FetchGrantToken(n8nRunnerServerURI, authToken)
+		launcherGrantToken, err := auth.FetchGrantToken(envCfg.MainRunnerServerURI, envCfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -110,7 +91,7 @@ func (l *LaunchCommand) Execute() error {
 
 		handshakeCfg := auth.HandshakeConfig{
 			TaskType:   l.RunnerType,
-			N8nURI:     n8nRunnerServerURI,
+			N8nURI:     envCfg.MainRunnerServerURI,
 			GrantToken: launcherGrantToken,
 		}
 
@@ -120,7 +101,7 @@ func (l *LaunchCommand) Execute() error {
 
 		// 7. fetch grant token for runner
 
-		runnerGrantToken, err := auth.FetchGrantToken(n8nRunnerServerURI, authToken)
+		runnerGrantToken, err := auth.FetchGrantToken(envCfg.MainRunnerServerURI, envCfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}
@@ -149,6 +130,6 @@ func (l *LaunchCommand) Execute() error {
 		}
 
 		// next runner will need to fetch a new grant token
-		runnerEnv = env.Clear(runnerEnv, "N8N_RUNNERS_GRANT_TOKEN")
+		runnerEnv = env.Clear(runnerEnv, env.EnvVarGrantToken)
 	}
 }

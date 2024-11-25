@@ -31,9 +31,9 @@ const (
 	// main server.
 	EnvVarMainServerURI = "N8N_MAIN_URI"
 
-	// EnvVarMainRunnerServerURI is the env var for the URI of the n8n main
+	// EnVarTaskBrokerURI is the env var for the URI of the n8n main
 	// instance's runner server. Do not confuse with `N8N_RUNNER_URI`.
-	EnvVarMainRunnerServerURI = "N8N_RUNNERS_N8N_URI"
+	EnVarTaskBrokerURI = "N8N_TASK_BROKER_URI"
 
 	// ------------------------
 	//         runner
@@ -117,7 +117,7 @@ func FromEnv() (*Config, error) {
 
 	authToken := os.Getenv(EnvVarAuthToken)
 	mainServerURI := os.Getenv(EnvVarMainServerURI)
-	mainRunnerServerURI := os.Getenv(EnvVarMainRunnerServerURI)
+	mainRunnerServerURI := os.Getenv(EnVarTaskBrokerURI)
 	runnerServerURI := os.Getenv(EnvVarRunnerServerURI)
 	runnerServerEnabled := os.Getenv(EnvVarRunnerServerEnabled)
 	idleTimeout := os.Getenv(EnvVarIdleTimeout)
@@ -126,7 +126,7 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarAuthToken))
 	}
 	if mainRunnerServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainRunnerServerURI))
+		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerURI))
 	}
 	if mainServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))

@@ -104,6 +104,7 @@ func Clear(envVars []string, envVarName string) []string {
 }
 
 // EnvConfig holds validated environment variable values.
+// nolint:revive // exported
 type EnvConfig struct {
 	AuthToken           string
 	MainServerURI       string

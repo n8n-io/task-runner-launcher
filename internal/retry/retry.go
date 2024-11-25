@@ -50,9 +50,9 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 			)
 		}
 
-		str, err := operationFn()
+		result, err := operationFn()
 		if err == nil {
-			return str, nil
+			return result, nil
 		}
 
 		lastErr = err

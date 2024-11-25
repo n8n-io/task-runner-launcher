@@ -128,7 +128,7 @@ func (l *LaunchCommand) Execute() error {
 
 		err = cmd.Run()
 		if err != nil {
-			logs.Errorf("Runner process failed with error: %w", err)
+			logs.Errorf("Runner process failed with error: %v", err)
 		} else {
 			logs.Info("Runner exited on idle timeout")
 		}

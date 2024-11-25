@@ -32,14 +32,14 @@ const (
 	EnvVarMainServerURI = "N8N_MAIN_URI"
 
 	// EnvVarMainRunnerServerURI is the env var for the URI of the n8n main
-	// instance's runner server.
+	// instance's runner server. Do not confuse with `N8N_RUNNER_URI`.
 	EnvVarMainRunnerServerURI = "N8N_RUNNERS_N8N_URI"
 
 	// ------------------------
 	//         runner
 	// ------------------------
 
-	// EnvVarRunnerServerURI is the env var for the n8n runner server URI. Do not
+	// EnvVarRunnerServerURI is the env var for the URI of the runner's server. Do not
 	// confuse with `N8N_RUNNERS_N8N_URI`.
 	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
 

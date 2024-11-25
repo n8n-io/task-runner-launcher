@@ -3,6 +3,7 @@ package env
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -128,10 +129,14 @@ func FromEnv() (*Config, error) {
 
 	if taskBrokerServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerServerURI))
+	} else if _, err := url.Parse(taskBrokerServerURI); err != nil {
+		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnVarTaskBrokerServerURI, err))
 	}
 
 	if mainServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
+	} else if _, err := url.Parse(mainServerURI); err != nil {
+		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarMainServerURI, err))
 	}
 
 	if runnerServerEnabled != "true" {

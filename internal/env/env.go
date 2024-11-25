@@ -53,7 +53,7 @@ const (
 )
 
 const (
-	defaultIdleTimeoutValue = 15 // seconds
+	defaultIdleTimeoutValue = "15" // seconds
 )
 
 // AllowedOnly filters the current environment down to only those
@@ -137,10 +137,10 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, fmt.Errorf("%s is required to be 'true'", EnvVarRunnerServerEnabled))
 	}
 
-	idleTimeoutInt := defaultIdleTimeoutValue
-	if idleTimeout != "" {
-		var err error
-		idleTimeoutInt, err = strconv.Atoi(idleTimeout)
+	if idleTimeout == "" {
+		os.Setenv(EnvVarIdleTimeout, defaultIdleTimeoutValue)
+	} else {
+		idleTimeoutInt, err := strconv.Atoi(idleTimeout)
 		if err != nil || idleTimeoutInt < 0 {
 			errs = append(errs, fmt.Errorf("%s must be a non-negative integer", EnvVarIdleTimeout))
 		}
@@ -156,6 +156,5 @@ func FromEnv() (*Config, error) {
 		MainRunnerServerURI: mainRunnerServerURI,
 		RunnerServerURI:     runnerServerURI,
 		RunnerServerEnabled: true,
-		IdleTimeout:         idleTimeoutInt,
 	}, nil
 }

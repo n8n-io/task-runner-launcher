@@ -78,7 +78,7 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
 			case <-ticker.C:
 				err := sendRunnerHealthCheckRequest(runnerURI)
 				if err == nil {
-					firstFailureTime = time.Time{}
+					firstFailureTime = time.Time{} // reset
 					logs.Debug("Runner is healthy")
 				} else if firstFailureTime.IsZero() {
 					firstFailureTime = time.Now()

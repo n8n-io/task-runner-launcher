@@ -125,12 +125,15 @@ func FromEnv() (*Config, error) {
 	if authToken == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarAuthToken))
 	}
+
 	if mainRunnerServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerURI))
 	}
+
 	if mainServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
 	}
+
 	if runnerServerEnabled != "true" {
 		errs = append(errs, fmt.Errorf("%s is required to be 'true'", EnvVarRunnerServerEnabled))
 	}

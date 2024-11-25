@@ -27,15 +27,15 @@ func (l *LaunchCommand) Execute() error {
 
 	// 1. read configuration
 
-	jsonCfg, err := config.ReadConfig()
+	fileCfg, err := config.ReadConfig()
 	if err != nil {
-		logs.Errorf("Error reading config: %v", err)
+		logs.Errorf("Error reading config file: %v", err)
 		return err
 	}
 
 	var runnerConfig config.TaskRunnerConfig
 	found := false
-	for _, r := range jsonCfg.TaskRunners {
+	for _, r := range fileCfg.TaskRunners {
 		if r.RunnerType == l.RunnerType {
 			runnerConfig = r
 			found = true
@@ -47,12 +47,12 @@ func (l *LaunchCommand) Execute() error {
 		return fmt.Errorf("config file does not contain requested runner type: %s", l.RunnerType)
 	}
 
-	jsonCfgNum := len(jsonCfg.TaskRunners)
+	taskRunnersNum := len(fileCfg.TaskRunners)
 
-	if jsonCfgNum == 1 {
+	if taskRunnersNum == 1 {
 		logs.Debug("Loaded config file loaded with a single runner config")
 	} else {
-		logs.Debugf("Loaded config file with %d runner configs", jsonCfgNum)
+		logs.Debugf("Loaded config file with %d runner configs", taskRunnersNum)
 	}
 
 	// 2. change into working directory

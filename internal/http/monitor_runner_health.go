@@ -4,12 +4,27 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"sync"
 	"task-runner-launcher/internal/logs"
 	"time"
 )
 
 const (
+	// runnerHealthCheckTimeout is the time limit for the runner's health check
+	// request.
 	runnerHealthCheckTimeout = 5 * time.Second
+
+	// healthCheckInterval is the interval at which we send a health check
+	// request to the runner.
+	healthCheckInterval = 10 * time.Second
+
+	// maxUnhealthyTime is the maximum time a runner can be unresponsive before
+	// we terminate it.
+	maxUnhealthyTime = 30 * time.Second
+
+	// initialStartupDelay is the time to wait before sending the first health
+	// check request, to account for the runner's startup time.
+	initialStartupDelay = 3 * time.Second
 )
 
 // sendRunnerHealthCheckRequest sends a request to the runner's health check endpoint.
@@ -34,32 +49,48 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 	return nil
 }
 
-const (
-	healthCheckInterval = 10 * time.Second
-	maxUnhealthyTime    = 30 * time.Second
-)
+// MonitorRunnerHealth regularly checks the runner's health status. We wait for
+// the runner to start up, then send a health check request every 10 seconds. If
+// the health check fails for more than 30 seconds, we terminate the runner
+// process. If the runner exits, we stop monitoring.
+func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-// MonitorRunnerHealth periodically checks the runner's health status. If the
-// health check fails for more than the max allowed time, we terminate the
-// runner process.
-func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string) {
-	var firstFailureTime time.Time
+		time.Sleep(initialStartupDelay) // give runner time to start up
 
-	for {
-		time.Sleep(healthCheckInterval)
+		var firstFailureTime time.Time
+		done := make(chan struct{})
 
-		err := sendRunnerHealthCheckRequest(runnerURI)
+		go func() {
+			cmd.Wait()
+			close(done)
+		}()
 
-		if err == nil {
-			firstFailureTime = time.Time{}
-		} else if firstFailureTime.IsZero() {
-			firstFailureTime = time.Now()
-		} else if time.Since(firstFailureTime) > maxUnhealthyTime {
-			logs.Warnf("Runner unhealthy for over %v seconds, terminating...", maxUnhealthyTime.Seconds())
-			if err := cmd.Process.Kill(); err != nil {
-				logs.Errorf("Failed to terminate runner process: %v", err)
+		ticker := time.NewTicker(healthCheckInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return // stop monitoring
+			case <-ticker.C:
+				err := sendRunnerHealthCheckRequest(runnerURI)
+				if err == nil {
+					firstFailureTime = time.Time{}
+					logs.Debug("Runner is healthy")
+				} else if firstFailureTime.IsZero() {
+					firstFailureTime = time.Now()
+					logs.Debug("Runner is unresponsive")
+				} else if time.Since(firstFailureTime) > maxUnhealthyTime {
+					logs.Warnf("Runner unresponsive for over %v seconds, terminating...", maxUnhealthyTime.Seconds())
+					if err := cmd.Process.Kill(); err != nil {
+						logs.Errorf("Failed to terminate runner process: %v", err)
+					}
+					return // stop monitoring
+				}
 			}
-			return
 		}
-	}
+	}()
 }

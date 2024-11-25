@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
@@ -122,14 +123,17 @@ func (l *LaunchCommand) Execute() error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		go http.MonitorRunnerHealth(cmd, envCfg.RunnerServerURI) // @TODO: Wait for startup and stop monitoring on exit
+		var wg sync.WaitGroup
+		go http.MonitorRunnerHealth(cmd, envCfg.RunnerServerURI, &wg)
 
 		err = cmd.Run()
 		if err != nil {
-			logs.Infof("Runner process failed: %v", err)
+			logs.Errorf("Runner process failed with error: %w", err)
 		} else {
-			logs.Infof("Runner exited on idle timeout")
+			logs.Info("Runner exited on idle timeout")
 		}
+
+		wg.Wait()
 
 		// next runner will need to fetch a new grant token
 		runnerEnv = env.Clear(runnerEnv, env.EnvVarGrantToken)

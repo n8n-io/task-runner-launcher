@@ -108,8 +108,6 @@ type Config struct {
 	MainServerURI       string
 	MainRunnerServerURI string
 	RunnerServerURI     string
-	RunnerServerEnabled bool
-	IdleTimeout         int
 }
 
 // FromEnv retrieves vars from the environment, validates their values, and
@@ -150,11 +148,12 @@ func FromEnv() (*Config, error) {
 		return nil, errors.Join(errs...)
 	}
 
+	os.Setenv(EnvVarRunnerServerEnabled, "true")
+
 	return &Config{
 		AuthToken:           authToken,
 		MainServerURI:       mainServerURI,
 		MainRunnerServerURI: mainRunnerServerURI,
 		RunnerServerURI:     runnerServerURI,
-		RunnerServerEnabled: true,
 	}, nil
 }

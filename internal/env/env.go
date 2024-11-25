@@ -120,7 +120,6 @@ func FromEnv() (*Config, error) {
 	mainServerURI := os.Getenv(EnvVarMainServerURI)
 	taskBrokerServerURI := os.Getenv(EnVarTaskBrokerServerURI)
 	runnerServerURI := os.Getenv(EnvVarRunnerServerURI)
-	runnerServerEnabled := os.Getenv(EnvVarRunnerServerEnabled)
 	idleTimeout := os.Getenv(EnvVarIdleTimeout)
 
 	if authToken == "" {
@@ -137,10 +136,6 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
 	} else if _, err := url.Parse(mainServerURI); err != nil {
 		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarMainServerURI, err))
-	}
-
-	if runnerServerEnabled != "true" {
-		errs = append(errs, fmt.Errorf("%s is required to be 'true'", EnvVarRunnerServerEnabled))
 	}
 
 	if idleTimeout == "" {

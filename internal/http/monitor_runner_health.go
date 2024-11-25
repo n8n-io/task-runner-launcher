@@ -10,20 +10,20 @@ import (
 )
 
 const (
-	// runnerHealthCheckTimeout is the timeout for the launcher's health check
-	// request to the runner.
+	// runnerHealthCheckTimeout is the timeout (in seconds) for the launcher's
+	// health check request to the runner.
 	runnerHealthCheckTimeout = 5 * time.Second
 
-	// healthCheckInterval is the interval at which the launcher sends a health
-	// check request to the runner.
+	// healthCheckInterval is the interval (in seconds) at which the launcher
+	// sends a health check request to the runner.
 	healthCheckInterval = 10 * time.Second
 
-	// maxUnhealthyTime is the maximum time a runner can be unresponsive before
-	// the launcher terminates the runner process.
+	// maxUnhealthyTime is the maximum time (in seconds) a runner can be
+	// unresponsive before the launcher terminates the runner process.
 	maxUnhealthyTime = 30 * time.Second // @TODO: Make configurable and identical to N8N_RUNNERS_TASK_TIMEOUT
 
-	// initialStartupDelay is the time to wait before sending the first health
-	// check request, to account for the runner's startup time.
+	// initialStartupDelay is the time (in seconds) to wait before sending the
+	// first health check request, to account for the runner's startup time.
 	initialStartupDelay = 3 * time.Second
 )
 

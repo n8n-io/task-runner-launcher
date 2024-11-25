@@ -29,11 +29,11 @@ const (
 	// ------------------------
 
 	// EnvVarMainServerURI is the env var for the URI of the n8n main instance's
-	// main server.
+	// main server, typically at http://127.0.0.1:5678.
 	EnvVarMainServerURI = "N8N_MAIN_URI"
 
 	// EnVarTaskBrokerServerURI is the env var for the URI of the n8n main
-	// instance's runner server.
+	// instance's task broker server, typically at http://127.0.0.1:5679.
 	EnVarTaskBrokerServerURI = "N8N_TASK_BROKER_URI"
 
 	// ------------------------
@@ -41,7 +41,7 @@ const (
 	// ------------------------
 
 	// EnvVarRunnerServerURI is the env var for the URI of the runner's server.
-	// Used for monitoring the runner's health.
+	// Used for monitoring the runner's health, typically at http://127.0.0.1:5680.
 	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
 
 	// EnvVarRunnerServerEnabled is the env var for whether the runner's health
@@ -107,7 +107,7 @@ func Clear(envVars []string, envVarName string) []string {
 type Config struct {
 	AuthToken           string
 	MainServerURI       string
-	MainRunnerServerURI string
+	TaskBrokerServerURI string
 	RunnerServerURI     string
 }
 
@@ -126,16 +126,22 @@ func FromEnv() (*Config, error) {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarAuthToken))
 	}
 
-	if taskBrokerServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerServerURI))
-	} else if _, err := url.Parse(taskBrokerServerURI); err != nil {
-		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnVarTaskBrokerServerURI, err))
-	}
-
 	if mainServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
 	} else if _, err := url.Parse(mainServerURI); err != nil {
 		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarMainServerURI, err))
+	}
+
+	if runnerServerURI == "" {
+		errs = append(errs, fmt.Errorf("%s is required", EnvVarRunnerServerURI))
+	} else if _, err := url.Parse(runnerServerURI); err != nil {
+		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarRunnerServerURI, err))
+	}
+
+	if taskBrokerServerURI == "" {
+		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerServerURI))
+	} else if _, err := url.Parse(taskBrokerServerURI); err != nil {
+		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnVarTaskBrokerServerURI, err))
 	}
 
 	if idleTimeout == "" {
@@ -156,7 +162,7 @@ func FromEnv() (*Config, error) {
 	return &Config{
 		AuthToken:           authToken,
 		MainServerURI:       mainServerURI,
-		MainRunnerServerURI: taskBrokerServerURI,
+		TaskBrokerServerURI: taskBrokerServerURI,
 		RunnerServerURI:     runnerServerURI,
 	}, nil
 }

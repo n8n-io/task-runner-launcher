@@ -15,7 +15,7 @@ type grantTokenResponse struct {
 }
 
 func sendGrantTokenRequest(n8nURI, authToken string) (string, error) {
-	url := fmt.Sprintf("http://%s/runners/auth", n8nURI)
+	url := fmt.Sprintf("%s/runners/auth", n8nURI)
 
 	payload := map[string]string{"token": authToken}
 	payloadBytes, err := json.Marshal(payload)

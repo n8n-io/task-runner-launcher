@@ -80,7 +80,7 @@ func (l *LaunchCommand) Execute() error {
 	for {
 		// 5. fetch grant token for launcher
 
-		launcherGrantToken, err := auth.FetchGrantToken(envCfg.MainRunnerServerURI, envCfg.AuthToken)
+		launcherGrantToken, err := auth.FetchGrantToken(envCfg.TaskBrokerServerURI, envCfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -91,7 +91,7 @@ func (l *LaunchCommand) Execute() error {
 
 		handshakeCfg := auth.HandshakeConfig{
 			TaskType:   l.RunnerType,
-			N8nURI:     envCfg.MainRunnerServerURI,
+			N8nURI:     envCfg.TaskBrokerServerURI,
 			GrantToken: launcherGrantToken,
 		}
 
@@ -101,7 +101,7 @@ func (l *LaunchCommand) Execute() error {
 
 		// 7. fetch grant token for runner
 
-		runnerGrantToken, err := auth.FetchGrantToken(envCfg.MainRunnerServerURI, envCfg.AuthToken)
+		runnerGrantToken, err := auth.FetchGrantToken(envCfg.TaskBrokerServerURI, envCfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}

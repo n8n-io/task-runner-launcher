@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
-	"strings"
 	"task-runner-launcher/internal/logs"
 
 	"github.com/gorilla/websocket"
@@ -53,10 +52,6 @@ func validateConfig(cfg HandshakeConfig) error {
 }
 
 func buildWebsocketURL(n8nURI, runnerID string) (*url.URL, error) {
-	if !strings.HasPrefix(n8nURI, "http://") && !strings.HasPrefix(n8nURI, "https://") {
-		n8nURI = "http://" + n8nURI
-	}
-
 	u, err := url.Parse(n8nURI)
 	if err != nil {
 		return nil, fmt.Errorf("invalid n8n URI: %w", err)

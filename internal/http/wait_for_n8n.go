@@ -3,19 +3,13 @@ package http
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"task-runner-launcher/internal/logs"
 	"task-runner-launcher/internal/retry"
 	"time"
 )
 
 func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
-	baseURL := n8nMainServerURI
-	if !strings.HasPrefix(n8nMainServerURI, "http://") && !strings.HasPrefix(n8nMainServerURI, "https://") {
-		baseURL = "http://" + n8nMainServerURI
-	}
-
-	url := fmt.Sprintf("%s/healthz/readiness", baseURL)
+	url := fmt.Sprintf("%s/healthz/readiness", n8nMainServerURI)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,

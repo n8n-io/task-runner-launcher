@@ -32,15 +32,15 @@ const (
 	EnvVarMainServerURI = "N8N_MAIN_URI"
 
 	// EnVarTaskBrokerURI is the env var for the URI of the n8n main
-	// instance's runner server. Do not confuse with `N8N_RUNNER_URI`.
+	// instance's runner server.
 	EnVarTaskBrokerURI = "N8N_TASK_BROKER_URI"
 
 	// ------------------------
 	//         runner
 	// ------------------------
 
-	// EnvVarRunnerServerURI is the env var for the URI of the runner's server. Do not
-	// confuse with `N8N_RUNNERS_N8N_URI`. Used for monitoring the runner's health
+	// EnvVarRunnerServerURI is the env var for the URI of the runner's server.
+	// Used for monitoring the runner's health.
 	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
 
 	// EnvVarRunnerServerEnabled is the env var for whether the runner's health

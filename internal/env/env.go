@@ -103,8 +103,8 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
-// Config holds validated environment variable values.
-type Config struct {
+// EnvConfig holds validated environment variable values.
+type EnvConfig struct {
 	AuthToken           string
 	MainServerURI       string
 	TaskBrokerServerURI string
@@ -113,7 +113,7 @@ type Config struct {
 
 // FromEnv retrieves vars from the environment, validates their values, and
 // returns a Config holding the validated values, or a slice of errors.
-func FromEnv() (*Config, error) {
+func FromEnv() (*EnvConfig, error) {
 	var errs []error
 
 	authToken := os.Getenv(EnvVarAuthToken)
@@ -159,7 +159,7 @@ func FromEnv() (*Config, error) {
 
 	os.Setenv(EnvVarRunnerServerEnabled, "true")
 
-	return &Config{
+	return &EnvConfig{
 		AuthToken:           authToken,
 		MainServerURI:       mainServerURI,
 		TaskBrokerServerURI: taskBrokerServerURI,

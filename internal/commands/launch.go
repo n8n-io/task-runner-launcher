@@ -90,9 +90,9 @@ func (l *LaunchCommand) Execute() error {
 		// 6. connect to main and wait for task offer to be accepted
 
 		handshakeCfg := auth.HandshakeConfig{
-			TaskType:   l.RunnerType,
-			N8nURI:     envCfg.TaskBrokerServerURI,
-			GrantToken: launcherGrantToken,
+			TaskType:            l.RunnerType,
+			TaskBrokerServerURI: envCfg.TaskBrokerServerURI,
+			GrantToken:          launcherGrantToken,
 		}
 
 		if err := auth.Handshake(handshakeCfg); err != nil {

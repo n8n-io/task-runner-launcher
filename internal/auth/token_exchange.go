@@ -48,9 +48,9 @@ func sendGrantTokenRequest(n8nURI, authToken string) (string, error) {
 	return tokenResp.Data.Token, nil
 }
 
-// FetchGrantToken exchanges the launcher's auth token for a less privileged
+// FetchGrantToken exchanges the launcher's auth token for a single-use
 // grant token from the n8n main instance. In case the n8n main instance is
-// temporarily unavailable, This exchange is retried a limited number of times.
+// temporarily unavailable, this exchange is retried a limited number of times.
 func FetchGrantToken(n8nURI, authToken string) (string, error) {
 	grantTokenFetch := func() (string, error) {
 		token, err := sendGrantTokenRequest(n8nURI, authToken)

@@ -58,13 +58,13 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGro
 	go func() {
 		defer wg.Done()
 
-		time.Sleep(initialStartupDelay) // give runner time to start up
+		time.Sleep(initialStartupDelay)
 
 		var firstFailureTime time.Time
 		done := make(chan struct{})
 
 		go func() {
-			_ = cmd.Wait() // disregard error - either idle timeout or termination due to unresponsiveness
+			_ = cmd.Wait() // disregard error - either idle timeout or intentionally terminated
 			close(done)
 		}()
 
@@ -74,22 +74,22 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGro
 		for {
 			select {
 			case <-done:
-				return // stop monitoring
+				return
 			case <-ticker.C:
 				err := sendRunnerHealthCheckRequest(runnerServerURI)
 				if err == nil {
 					firstFailureTime = time.Time{} // reset
-					logs.Debug("Runner is healthy")
+					logs.Debug("Found runner healthy")
 				} else if firstFailureTime.IsZero() {
 					firstFailureTime = time.Now()
-					logs.Debug("Runner is unresponsive")
+					logs.Warn("Found runner unresponsive")
 				} else if time.Since(firstFailureTime) > maxUnhealthyTime {
 					logs.Warnf("Runner unresponsive for over %v seconds, terminating...", maxUnhealthyTime.Seconds())
 					if err := cmd.Process.Kill(); err != nil {
 						logs.Errorf("Failed to terminate runner process: %v", err)
 						// @TODO: How to handle this?
 					}
-					return // stop monitoring
+					return
 				}
 			}
 		}

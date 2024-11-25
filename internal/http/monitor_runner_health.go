@@ -53,7 +53,7 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 // the runner to start up, then send a health check request every 10 seconds. If
 // the health check fails for more than 30 seconds, we terminate the runner
 // process. If the runner exits, we stop monitoring.
-func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
+func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -76,7 +76,7 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerURI string, wg *sync.WaitGroup) {
 			case <-done:
 				return // stop monitoring
 			case <-ticker.C:
-				err := sendRunnerHealthCheckRequest(runnerURI)
+				err := sendRunnerHealthCheckRequest(runnerServerURI)
 				if err == nil {
 					firstFailureTime = time.Time{} // reset
 					logs.Debug("Runner is healthy")

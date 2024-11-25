@@ -40,7 +40,7 @@ const (
 	// ------------------------
 
 	// EnvVarRunnerServerURI is the env var for the URI of the runner's server. Do not
-	// confuse with `N8N_RUNNERS_N8N_URI`.
+	// confuse with `N8N_RUNNERS_N8N_URI`. Used for monitoring the runner's health
 	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
 
 	// EnvVarRunnerServerEnabled is the env var for whether the runner's health

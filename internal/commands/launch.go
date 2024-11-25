@@ -122,6 +122,8 @@ func (l *LaunchCommand) Execute() error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
+		go http.MonitorRunnerHealth(cmd, envCfg.RunnerServerURI) // @TODO: Wait for startup and stop monitoring on exit
+
 		err = cmd.Run()
 		if err != nil {
 			logs.Infof("Runner process failed: %v", err)

@@ -50,8 +50,8 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 }
 
 // MonitorRunnerHealth regularly checks the runner's health status. We wait for
-// the runner to start up, then send a health check request every 10 seconds. If
-// the health check fails for more than 30 seconds, we terminate the runner
+// the runner to start up, then send a health check request on an interval. If
+// the health check fails more times than allowed, we terminate the runner
 // process and stop monitoring. If the runner exits, we stop monitoring.
 func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGroup) {
 	wg.Add(1)

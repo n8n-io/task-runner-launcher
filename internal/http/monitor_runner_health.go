@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -10,20 +11,20 @@ import (
 )
 
 const (
-	// runnerHealthCheckTimeout is the timeout (in seconds) for the launcher's
-	// health check request to the runner.
-	runnerHealthCheckTimeout = 5 * time.Second
+	// healthCheckTimeout is the timeout (in seconds) for the launcher's health
+	// check request to the runner.
+	healthCheckTimeout = 5 * time.Second
 
 	// healthCheckInterval is the interval (in seconds) at which the launcher
 	// sends a health check request to the runner.
 	healthCheckInterval = 10 * time.Second
 
-	// maxUnhealthyTime is the maximum time (in seconds) a runner can be
-	// unresponsive before the launcher terminates the runner process.
-	maxUnhealthyTime = 30 * time.Second // @TODO: Make configurable and identical to N8N_RUNNERS_TASK_TIMEOUT
+	// healthCheckMaxFailures is the max number of times a runner can be found
+	// unresponsive before the launcher terminates the runner.
+	healthCheckMaxFailures = 6
 
-	// initialDelay is the time (in seconds) to wait before sending the
-	// first health check request, to account for the runner's startup time.
+	// initialDelay is the time (in seconds) to wait before sending the first
+	// health check request, to account for the runner's startup time.
 	initialDelay = 3 * time.Second
 )
 
@@ -33,7 +34,7 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 	url := fmt.Sprintf("%s/healthz", runnerServerURI)
 
 	client := &http.Client{
-		Timeout: runnerHealthCheckTimeout,
+		Timeout: healthCheckTimeout,
 	}
 
 	resp, err := client.Get(url)
@@ -49,46 +50,39 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 	return nil
 }
 
-// MonitorRunnerHealth regularly checks the runner's health status. We wait for
-// the runner to start up, then send a health check request on an interval. If
-// the health check fails more times than allowed, we terminate the runner
-// process and stop monitoring. If the runner exits, we stop monitoring.
-func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGroup) {
+// MonitorRunnerHealth regularly checks the runner's health status. If the
+// health check fails more times than allowed, we terminate the runner process.
+func MonitorRunnerHealth(ctx context.Context, cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
 		time.Sleep(initialDelay)
 
-		var firstFailureTime time.Time
-		done := make(chan struct{})
-
-		go func() {
-			_ = cmd.Wait() // disregard error - either idle timeout or intentionally terminated
-			close(done)
-		}()
-
+		failureCount := 0
 		ticker := time.NewTicker(healthCheckInterval)
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
+				logs.Debug("Stopped monitoring runner health")
 				return
 			case <-ticker.C:
-				err := sendRunnerHealthCheckRequest(runnerServerURI)
-				if err == nil {
-					firstFailureTime = time.Time{} // reset
-					logs.Debug("Found runner healthy")
-				} else if firstFailureTime.IsZero() {
-					firstFailureTime = time.Now()
-					logs.Warn("Found runner unresponsive")
-				} else if time.Since(firstFailureTime) > maxUnhealthyTime {
-					logs.Warnf("Runner unresponsive for over %v seconds, terminating...", maxUnhealthyTime.Seconds())
-					if err := cmd.Process.Kill(); err != nil {
-						panic(fmt.Errorf("Failed to terminate runner process: %v", err))
+				if err := sendRunnerHealthCheckRequest(runnerServerURI); err != nil {
+					failureCount++
+					logs.Warnf("Found runner unresponsive (%d/%d)", failureCount, healthCheckMaxFailures)
+					if failureCount >= healthCheckMaxFailures {
+						logs.Warn("Reached max failures on runner health check, terminating runner...")
+						if err := cmd.Process.Kill(); err != nil {
+							panic(fmt.Errorf("failed to terminate runner process: %v", err))
+						}
+						logs.Debug("Stopped monitoring runner health")
+						return
 					}
-					return
+				} else {
+					failureCount = 0
+					logs.Debug("Found runner healthy")
 				}
 			}
 		}

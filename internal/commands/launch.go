@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -118,20 +119,30 @@ func (l *LaunchCommand) Execute() error {
 		logs.Debugf("Args: %v", runnerConfig.Args)
 		logs.Debugf("Env vars: %v", env.Keys(runnerEnv))
 
-		cmd := exec.Command(runnerConfig.Command, runnerConfig.Args...)
+		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+
+		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
 		cmd.Env = runnerEnv
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		var wg sync.WaitGroup
-		go http.MonitorRunnerHealth(cmd, envCfg.RunnerServerURI, &wg)
+		if err := cmd.Start(); err != nil {
+			cancelHealthMonitor()
+			return fmt.Errorf("failed to start runner process: %w", err)
+		}
 
-		err = cmd.Run()
-		if err != nil {
-			logs.Errorf("Runner process failed: %v", err)
+		go http.MonitorRunnerHealth(ctx, cmd, envCfg.RunnerServerURI, &wg)
+
+		err = cmd.Wait()
+		if err != nil && err.Error() == "signal: killed" {
+			logs.Warn("Unhealthy runner process was terminated")
+		} else if err != nil {
+			logs.Errorf("Runner process exited with error: %v", err)
 		} else {
 			logs.Info("Runner exited on idle timeout")
 		}
+		cancelHealthMonitor()
 
 		wg.Wait()
 

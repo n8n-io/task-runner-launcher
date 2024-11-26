@@ -124,8 +124,7 @@ func (l *LaunchCommand) Execute() error {
 
 		cmd := exec.CommandContext(ctx, runnerCfg.Command, runnerCfg.Args...)
 		cmd.Env = runnerEnv
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters()
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()

@@ -86,8 +86,7 @@ func MonitorRunnerHealth(cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGro
 				} else if time.Since(firstFailureTime) > maxUnhealthyTime {
 					logs.Warnf("Runner unresponsive for over %v seconds, terminating...", maxUnhealthyTime.Seconds())
 					if err := cmd.Process.Kill(); err != nil {
-						logs.Errorf("Failed to terminate runner process: %v", err)
-						// @TODO: How to handle this?
+						panic(fmt.Errorf("Failed to terminate runner process: %v", err))
 					}
 					return
 				}

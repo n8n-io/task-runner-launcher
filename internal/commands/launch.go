@@ -35,11 +35,11 @@ func (l *LaunchCommand) Execute() error {
 		return err
 	}
 
-	var runnerConfig config.TaskRunnerConfig
+	var runnerCfg config.TaskRunnerConfig
 	found := false
 	for _, r := range fileCfg.TaskRunners {
 		if r.RunnerType == l.RunnerType {
-			runnerConfig = r
+			runnerCfg = r
 			found = true
 			break
 		}
@@ -59,16 +59,16 @@ func (l *LaunchCommand) Execute() error {
 
 	// 2. change into working directory
 
-	if err := os.Chdir(runnerConfig.WorkDir); err != nil {
-		return fmt.Errorf("failed to chdir into configured dir (%s): %w", runnerConfig.WorkDir, err)
+	if err := os.Chdir(runnerCfg.WorkDir); err != nil {
+		return fmt.Errorf("failed to chdir into configured dir (%s): %w", runnerCfg.WorkDir, err)
 	}
 
-	logs.Debugf("Changed into working directory: %s", runnerConfig.WorkDir)
+	logs.Debugf("Changed into working directory: %s", runnerCfg.WorkDir)
 
 	// 3. filter environment variables
 
 	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", env.EnvVarIdleTimeout, env.EnvVarRunnerServerEnabled}
-	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
+	allowedEnvs := append(defaultEnvs, runnerCfg.AllowedEnv...)
 	runnerEnv := env.AllowedOnly(allowedEnvs)
 
 	logs.Debugf("Filtered environment variables")
@@ -115,14 +115,14 @@ func (l *LaunchCommand) Execute() error {
 		// 8. launch runner
 
 		logs.Debug("Task ready for pickup, launching runner...")
-		logs.Debugf("Command: %s", runnerConfig.Command)
-		logs.Debugf("Args: %v", runnerConfig.Args)
+		logs.Debugf("Command: %s", runnerCfg.Command)
+		logs.Debugf("Args: %v", runnerCfg.Args)
 		logs.Debugf("Env vars: %v", env.Keys(runnerEnv))
 
 		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
 		var wg sync.WaitGroup
 
-		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
+		cmd := exec.CommandContext(ctx, runnerCfg.Command, runnerCfg.Args...)
 		cmd.Env = runnerEnv
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

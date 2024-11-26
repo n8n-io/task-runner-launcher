@@ -151,7 +151,7 @@ func TestFromEnv(t *testing.T) {
 		expected    *EnvConfig
 	}{
 		{
-			name: "valid configuration",
+			name: "valid custom configuration",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
 				EnvVarMainServerURI:       "http://localhost:9000",

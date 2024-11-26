@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +11,9 @@ import (
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
 	"task-runner-launcher/internal/http"
+	"task-runner-launcher/internal/launcherr"
 	"task-runner-launcher/internal/logs"
+	"time"
 )
 
 type LaunchCommand struct {
@@ -73,13 +76,13 @@ func (l *LaunchCommand) Execute() error {
 
 	logs.Debugf("Filtered environment variables")
 
-	// 4. wait for n8n instance to be ready
-
-	if err := http.WaitForN8nReady(envCfg.MainServerURI); err != nil {
-		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
-	}
-
 	for {
+		// 4. check until n8n instance is ready
+
+		if err := http.CheckUntilN8nReady(envCfg.MainServerURI); err != nil {
+			return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
+		}
+
 		// 5. fetch grant token for launcher
 
 		launcherGrantToken, err := auth.FetchGrantToken(envCfg.TaskBrokerServerURI, envCfg.AuthToken)
@@ -97,7 +100,13 @@ func (l *LaunchCommand) Execute() error {
 			GrantToken:          launcherGrantToken,
 		}
 
-		if err := auth.Handshake(handshakeCfg); err != nil {
+		err = auth.Handshake(handshakeCfg)
+		switch {
+		case errors.Is(err, launcherr.ErrServerDown):
+			logs.Warn("n8n is down, launcher will try to reconnect...")
+			time.Sleep(time.Second * 5)
+			continue // back to checking until n8n ready
+		case err != nil:
 			return fmt.Errorf("handshake failed: %w", err)
 		}
 

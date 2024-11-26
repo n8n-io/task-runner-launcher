@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"task-runner-launcher/internal/launcherr"
 	"task-runner-launcher/internal/logs"
 
 	"github.com/gorilla/websocket"
@@ -129,10 +130,14 @@ func Handshake(cfg HandshakeConfig) error {
 			var msg message
 			err := wsConn.ReadJSON(&msg)
 			if err != nil {
-				if err == websocket.ErrReadLimit {
-					logs.Errorf("Websocket message too large for buffer - please increase buffer size")
+				switch {
+				case websocket.IsCloseError(err, websocket.CloseGoingAway):
+					errReceived <- launcherr.ErrServerDown
+				case err == websocket.ErrReadLimit:
+					errReceived <- launcherr.ErrWsMsgTooLarge
+				default:
+					errReceived <- fmt.Errorf("failed to read ws message: %w", err)
 				}
-				errReceived <- fmt.Errorf("failed to read message: %w", err)
 				return
 			}
 
@@ -194,6 +199,7 @@ func Handshake(cfg HandshakeConfig) error {
 
 	select {
 	case err := <-errReceived:
+		wsConn.Close()
 		return err
 	case <-handshakeComplete:
 		logs.Info("Runner's task offer was accepted")

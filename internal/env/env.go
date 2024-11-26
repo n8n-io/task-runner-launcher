@@ -54,7 +54,10 @@ const (
 )
 
 const (
-	defaultIdleTimeoutValue = "15" // seconds
+	defaultIdleTimeoutValue    = "15" // seconds
+	DefaultMainServerUri       = "http://127.0.0.1:5678"
+	DefaultTaskBrokerServerUri = "http://127.0.0.1:5679"
+	DefaultRunnerServerUri     = "http://127.0.0.1:5680"
 )
 
 // AllowedOnly filters the current environment down to only those
@@ -143,19 +146,19 @@ func FromEnv() (*EnvConfig, error) {
 	}
 
 	if mainServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
+		mainServerURI = DefaultMainServerUri
 	} else if err := validateURL(mainServerURI, EnvVarMainServerURI); err != nil {
 		errs = append(errs, err)
 	}
 
 	if runnerServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvVarRunnerServerURI))
+		runnerServerURI = DefaultRunnerServerUri
 	} else if err := validateURL(runnerServerURI, EnvVarRunnerServerURI); err != nil {
 		errs = append(errs, err)
 	}
 
 	if taskBrokerServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvVarTaskBrokerServerURI))
+		taskBrokerServerURI = DefaultTaskBrokerServerUri
 	} else if err := validateURL(taskBrokerServerURI, EnvVarTaskBrokerServerURI); err != nil {
 		errs = append(errs, err)
 	}

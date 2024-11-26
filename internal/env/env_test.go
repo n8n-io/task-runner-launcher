@@ -148,17 +148,23 @@ func TestFromEnv(t *testing.T) {
 		name        string
 		envVars     map[string]string
 		expectError bool
+		expected    *EnvConfig
 	}{
 		{
 			name: "valid configuration",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://localhost:5678",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-				EnvVarRunnerServerURI:     "http://localhost:5680",
+				EnvVarMainServerURI:       "http://localhost:9000",
+				EnvVarTaskBrokerServerURI: "http://localhost:9001",
+				EnvVarRunnerServerURI:     "http://localhost:9002",
 				EnvVarIdleTimeout:         "30",
 			},
-			expectError: false,
+			expected: &EnvConfig{
+				AuthToken:           "token123",
+				MainServerURI:       "http://localhost:9000",
+				TaskBrokerServerURI: "http://localhost:9001",
+				RunnerServerURI:     "http://localhost:9002",
+			},
 		},
 		{
 			name: "missing auth token",
@@ -186,7 +192,12 @@ func TestFromEnv(t *testing.T) {
 				EnvVarTaskBrokerServerURI: "http://localhost:5679",
 				EnvVarRunnerServerURI:     "http://localhost:5680",
 			},
-			expectError: true,
+			expected: &EnvConfig{
+				AuthToken:           "token123",
+				MainServerURI:       DefaultMainServerUri,
+				TaskBrokerServerURI: "http://localhost:5679",
+				RunnerServerURI:     "http://localhost:5680",
+			},
 		},
 		{
 			name: "invalid task broker server URI",
@@ -205,7 +216,12 @@ func TestFromEnv(t *testing.T) {
 				EnvVarMainServerURI:   "http://localhost:5678",
 				EnvVarRunnerServerURI: "http://localhost:5680",
 			},
-			expectError: true,
+			expected: &EnvConfig{
+				AuthToken:           "token123",
+				MainServerURI:       "http://localhost:5678",
+				TaskBrokerServerURI: DefaultTaskBrokerServerUri,
+				RunnerServerURI:     "http://localhost:5680",
+			},
 		},
 		{
 			name: "invalid runner server URI",
@@ -224,7 +240,12 @@ func TestFromEnv(t *testing.T) {
 				EnvVarMainServerURI:       "http://localhost:5678",
 				EnvVarTaskBrokerServerURI: "http://localhost:5679",
 			},
-			expectError: true,
+			expected: &EnvConfig{
+				AuthToken:           "token123",
+				MainServerURI:       "http://localhost:5678",
+				TaskBrokerServerURI: "http://localhost:5679",
+				RunnerServerURI:     DefaultRunnerServerUri,
+			},
 		},
 		{
 			name: "missing scheme in 127.0.0.1 URI",
@@ -296,20 +317,8 @@ func TestFromEnv(t *testing.T) {
 				return
 			}
 
-			if envCfg.AuthToken != tt.envVars[EnvVarAuthToken] {
-				t.Errorf("FromEnv() AuthToken = %v, want %v", envCfg.AuthToken, tt.envVars[EnvVarAuthToken])
-			}
-
-			if envCfg.MainServerURI != tt.envVars[EnvVarMainServerURI] {
-				t.Errorf("FromEnv() MainServerURI = %v, want %v", envCfg.MainServerURI, tt.envVars[EnvVarMainServerURI])
-			}
-
-			if envCfg.TaskBrokerServerURI != tt.envVars[EnvVarTaskBrokerServerURI] {
-				t.Errorf("FromEnv() TaskBrokerServerURI = %v, want %v", envCfg.TaskBrokerServerURI, tt.envVars[EnvVarTaskBrokerServerURI])
-			}
-
-			if envCfg.RunnerServerURI != tt.envVars[EnvVarRunnerServerURI] {
-				t.Errorf("FromEnv() RunnerServerURI = %v, want %v", envCfg.RunnerServerURI, tt.envVars[EnvVarRunnerServerURI])
+			if !reflect.DeepEqual(envCfg, tt.expected) {
+				t.Errorf("FromEnv() = %+v, want %+v", envCfg, tt.expected)
 			}
 
 			if os.Getenv(EnvVarRunnerServerEnabled) != "true" {

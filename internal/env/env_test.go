@@ -194,7 +194,7 @@ func TestFromEnv(t *testing.T) {
 			},
 			expected: &EnvConfig{
 				AuthToken:           "token123",
-				MainServerURI:       DefaultMainServerUri,
+				MainServerURI:       DefaultMainServerURI,
 				TaskBrokerServerURI: "http://localhost:5679",
 				RunnerServerURI:     "http://localhost:5680",
 			},
@@ -219,7 +219,7 @@ func TestFromEnv(t *testing.T) {
 			expected: &EnvConfig{
 				AuthToken:           "token123",
 				MainServerURI:       "http://localhost:5678",
-				TaskBrokerServerURI: DefaultTaskBrokerServerUri,
+				TaskBrokerServerURI: DefaultTaskBrokerServerURI,
 				RunnerServerURI:     "http://localhost:5680",
 			},
 		},
@@ -244,7 +244,7 @@ func TestFromEnv(t *testing.T) {
 				AuthToken:           "token123",
 				MainServerURI:       "http://localhost:5678",
 				TaskBrokerServerURI: "http://localhost:5679",
-				RunnerServerURI:     DefaultRunnerServerUri,
+				RunnerServerURI:     DefaultRunnerServerURI,
 			},
 		},
 		{

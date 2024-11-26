@@ -14,8 +14,8 @@ type grantTokenResponse struct {
 	} `json:"data"`
 }
 
-func sendGrantTokenRequest(n8nURI, authToken string) (string, error) {
-	url := fmt.Sprintf("%s/runners/auth", n8nURI)
+func sendGrantTokenRequest(taskBrokerServerURI, authToken string) (string, error) {
+	url := fmt.Sprintf("%s/runners/auth", taskBrokerServerURI)
 
 	payload := map[string]string{"token": authToken}
 	payloadBytes, err := json.Marshal(payload)
@@ -51,9 +51,9 @@ func sendGrantTokenRequest(n8nURI, authToken string) (string, error) {
 // FetchGrantToken exchanges the launcher's auth token for a single-use
 // grant token from the n8n main instance. In case the n8n main instance is
 // temporarily unavailable, this exchange is retried a limited number of times.
-func FetchGrantToken(n8nURI, authToken string) (string, error) {
+func FetchGrantToken(taskBrokerServerURI, authToken string) (string, error) {
 	grantTokenFetch := func() (string, error) {
-		token, err := sendGrantTokenRequest(n8nURI, authToken)
+		token, err := sendGrantTokenRequest(taskBrokerServerURI, authToken)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch grant token: %w", err)
 		}

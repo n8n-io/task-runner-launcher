@@ -30,9 +30,9 @@ type message struct {
 }
 
 type HandshakeConfig struct {
-	TaskType   string
-	N8nURI     string
-	GrantToken string
+	TaskType            string
+	TaskBrokerServerURI string
+	GrantToken          string
 }
 
 func validateConfig(cfg HandshakeConfig) error {
@@ -40,7 +40,7 @@ func validateConfig(cfg HandshakeConfig) error {
 		return fmt.Errorf("runner type is missing")
 	}
 
-	if cfg.N8nURI == "" {
+	if cfg.TaskBrokerServerURI == "" {
 		return fmt.Errorf("n8n URI is missing")
 	}
 
@@ -51,8 +51,8 @@ func validateConfig(cfg HandshakeConfig) error {
 	return nil
 }
 
-func buildWebsocketURL(n8nURI, runnerID string) (*url.URL, error) {
-	u, err := url.Parse(n8nURI)
+func buildWebsocketURL(taskBrokerServerURI, runnerID string) (*url.URL, error) {
+	u, err := url.Parse(taskBrokerServerURI)
 	if err != nil {
 		return nil, fmt.Errorf("invalid n8n URI: %w", err)
 	}
@@ -109,7 +109,7 @@ func Handshake(cfg HandshakeConfig) error {
 	runnerID := randomID()
 	logs.Infof("Launcher's runner ID: %s", runnerID)
 
-	wsURL, err := buildWebsocketURL(cfg.N8nURI, runnerID)
+	wsURL, err := buildWebsocketURL(cfg.TaskBrokerServerURI, runnerID)
 	if err != nil {
 		return fmt.Errorf("failed to build websocket URL: %w", err)
 	}

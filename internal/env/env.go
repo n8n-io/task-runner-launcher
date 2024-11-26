@@ -32,9 +32,9 @@ const (
 	// main server, typically at http://127.0.0.1:5678.
 	EnvVarMainServerURI = "N8N_MAIN_URI"
 
-	// EnVarTaskBrokerServerURI is the env var for the URI of the n8n main
+	// EnvVarTaskBrokerServerURI is the env var for the URI of the n8n main
 	// instance's task broker server, typically at http://127.0.0.1:5679.
-	EnVarTaskBrokerServerURI = "N8N_TASK_BROKER_URI"
+	EnvVarTaskBrokerServerURI = "N8N_TASK_BROKER_URI"
 
 	// ------------------------
 	//         runner
@@ -103,6 +103,21 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
+func validateURL(urlStr string, fieldName string) error {
+	u, err := url.Parse(urlStr)
+
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL: %w", fieldName, err)
+	}
+
+	if u.Scheme == "localhost" {
+		// edge case: `url.Parse` parses scheme in `localhost:5678` to be `localhost`
+		return fmt.Errorf("%s must include a scheme, e.g. http://", fieldName)
+	}
+
+	return nil
+}
+
 // EnvConfig holds validated environment variable values.
 // nolint:revive // exported
 type EnvConfig struct {
@@ -119,7 +134,7 @@ func FromEnv() (*EnvConfig, error) {
 
 	authToken := os.Getenv(EnvVarAuthToken)
 	mainServerURI := os.Getenv(EnvVarMainServerURI)
-	taskBrokerServerURI := os.Getenv(EnVarTaskBrokerServerURI)
+	taskBrokerServerURI := os.Getenv(EnvVarTaskBrokerServerURI)
 	runnerServerURI := os.Getenv(EnvVarRunnerServerURI)
 	idleTimeout := os.Getenv(EnvVarIdleTimeout)
 
@@ -129,20 +144,20 @@ func FromEnv() (*EnvConfig, error) {
 
 	if mainServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarMainServerURI))
-	} else if _, err := url.Parse(mainServerURI); err != nil {
-		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarMainServerURI, err))
+	} else if err := validateURL(mainServerURI, EnvVarMainServerURI); err != nil {
+		errs = append(errs, err)
 	}
 
 	if runnerServerURI == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarRunnerServerURI))
-	} else if _, err := url.Parse(runnerServerURI); err != nil {
-		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnvVarRunnerServerURI, err))
+	} else if err := validateURL(runnerServerURI, EnvVarRunnerServerURI); err != nil {
+		errs = append(errs, err)
 	}
 
 	if taskBrokerServerURI == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnVarTaskBrokerServerURI))
-	} else if _, err := url.Parse(taskBrokerServerURI); err != nil {
-		errs = append(errs, fmt.Errorf("%s must be a valid URL: %w", EnVarTaskBrokerServerURI, err))
+		errs = append(errs, fmt.Errorf("%s is required", EnvVarTaskBrokerServerURI))
+	} else if err := validateURL(taskBrokerServerURI, EnvVarTaskBrokerServerURI); err != nil {
+		errs = append(errs, err)
 	}
 
 	if idleTimeout == "" {

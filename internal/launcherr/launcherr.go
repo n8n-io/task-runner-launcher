@@ -3,10 +3,6 @@ package launcherr
 import "errors"
 
 var (
-	// ErrServerGoingAway is returned when the n8n server closes the launcher's
-	// websocket connection with status code 1001.
-	ErrServerGoingAway = errors.New("websocket connection closed by server going away")
-
 	// ErrServerDown is returned when the n8n runner server is down.
 	ErrServerDown = errors.New("n8n runner server is down")
 

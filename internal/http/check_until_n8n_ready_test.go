@@ -17,7 +17,7 @@ func TestCheckUntilN8nReady(t *testing.T) {
 	}{
 		{
 			name: "success on first try",
-			serverFn: func(w http.ResponseWriter, r *http.Request, reqCount int) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request, _ int) {
 				w.WriteHeader(http.StatusOK)
 			},
 			maxReqs: 1,

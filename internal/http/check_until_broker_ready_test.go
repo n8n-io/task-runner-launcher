@@ -35,6 +35,9 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			}))
 			defer server.Close()
 
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
 			done := make(chan error)
 			go func() {
 				done <- CheckUntilBrokerReady(server.URL)
@@ -54,7 +57,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 					t.Errorf("expected at most %d requests, got %d", tt.maxReqs, requestCount)
 				}
 
-			case <-time.After(tt.timeout):
+			case <-ctx.Done():
 				t.Errorf("test timed out after %v", tt.timeout)
 			}
 		})

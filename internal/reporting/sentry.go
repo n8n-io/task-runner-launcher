@@ -1,7 +1,6 @@
 package reporting
 
 import (
-	"log"
 	"os"
 	"task-runner-launcher/internal/logs"
 	"time"

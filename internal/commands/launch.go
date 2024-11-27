@@ -70,9 +70,11 @@ func (l *LaunchCommand) Execute() error {
 
 	// 3. filter environment variables
 
-	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", env.EnvVarIdleTimeout, env.EnvVarRunnerServerEnabled}
+	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", env.EnvVarIdleTimeout}
 	allowedEnvs := append(defaultEnvs, runnerCfg.AllowedEnv...)
 	runnerEnv := env.AllowedOnly(allowedEnvs)
+	// Static values
+	runnerEnv = append(runnerEnv, "N8N_RUNNERS_SERVER_ENABLED=true")
 
 	logs.Debugf("Filtered environment variables")
 
@@ -140,7 +142,7 @@ func (l *LaunchCommand) Execute() error {
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.MonitorRunnerHealth(ctx, cmd, envCfg.RunnerServerURI, &wg)
+		go http.MonitorRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg)
 
 		err = cmd.Wait()
 		if err != nil && err.Error() == "signal: killed" {

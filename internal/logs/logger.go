@@ -31,7 +31,7 @@ var (
 	colorCyan   = "\033[36m"
 )
 
-func init() {
+func Init() {
 	if os.Getenv("NO_COLOR") != "" {
 		colorReset = ""
 		colorRed = ""

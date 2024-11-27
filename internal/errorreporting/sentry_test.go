@@ -19,6 +19,13 @@ func TestConfigFromEnv(t *testing.T) {
 			expectedConfig: Config{IsEnabled: false},
 		},
 		{
+			name: "Sentry disabled when DSN is invalid",
+			envVars: map[string]string{
+				"SENTRY_DSN": "http://\\invalid",
+			},
+			expectedConfig: Config{IsEnabled: false},
+		},
+		{
 			name: "Sentry enabled with valid config",
 			envVars: map[string]string{
 				"SENTRY_DSN":      "http://example.com",
@@ -32,6 +39,19 @@ func TestConfigFromEnv(t *testing.T) {
 				DeploymentName: "test-deployment",
 				Environment:    "test-env",
 				Release:        "1.0.0",
+			},
+		},
+		{
+			name: "Sentry enabled with missing config",
+			envVars: map[string]string{
+				"SENTRY_DSN": "http://example.com",
+			},
+			expectedConfig: Config{
+				IsEnabled:      true,
+				Dsn:            "http://example.com",
+				DeploymentName: "task-runner-launcher",
+				Environment:    "unknown",
+				Release:        "unknown",
 			},
 		},
 	}

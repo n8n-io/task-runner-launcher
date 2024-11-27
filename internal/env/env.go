@@ -100,7 +100,7 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
-func validateURL(urlStr string, fieldName string) error {
+func ValidateURL(urlStr string, fieldName string) error {
 	u, err := url.Parse(urlStr)
 
 	if err != nil {
@@ -137,7 +137,7 @@ func FromEnv() (*EnvConfig, error) {
 
 	if taskBrokerServerURI == "" {
 		taskBrokerServerURI = DefaultTaskBrokerServerURI
-	} else if err := validateURL(taskBrokerServerURI, EnvVarTaskBrokerServerURI); err != nil {
+	} else if err := ValidateURL(taskBrokerServerURI, EnvVarTaskBrokerServerURI); err != nil {
 		errs = append(errs, err)
 	}
 

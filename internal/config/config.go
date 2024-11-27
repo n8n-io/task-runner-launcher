@@ -8,7 +8,7 @@ import (
 	"task-runner-launcher/internal/logs"
 )
 
-const configPath = "/etc/n8n-task-runners.json"
+var configPath = "/etc/n8n-task-runners.json"
 
 type TaskRunnerConfig struct {
 	// Type of task runner, currently only "javascript" supported

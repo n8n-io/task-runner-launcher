@@ -35,7 +35,7 @@ func (w *RunnerWriter) Write(p []byte) (n int, err error) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		w.writer.Printf("%s%s %s%s%s", w.color, w.level, w.prefix, line, colorReset)
+		w.writer.Printf("%s%s %s%s%s", w.color, w.level, w.prefix, line, ColorReset)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -47,8 +47,8 @@ func (w *RunnerWriter) Write(p []byte) (n int, err error) {
 
 // GetRunnerWriters returns configured `stdout` and `stderr` writers for a runner.
 func GetRunnerWriters() (stdout io.Writer, stderr io.Writer) {
-	stdout = NewRunnerWriter(os.Stdout, "[Runner] ", "DEBUG", colorCyan)
-	stderr = NewRunnerWriter(os.Stderr, "[Runner] ", "ERROR", colorRed)
+	stdout = NewRunnerWriter(os.Stdout, "[Runner] ", "DEBUG", ColorCyan)
+	stderr = NewRunnerWriter(os.Stderr, "[Runner] ", "ERROR", ColorRed)
 
 	return stdout, stderr
 }

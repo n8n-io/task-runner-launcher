@@ -252,25 +252,24 @@ func TestErrorLogs(t *testing.T) {
 }
 
 func TestColorDisabling(t *testing.T) {
-	origReset := colorReset
-	origRed := colorRed
-	origYellow := colorYellow
-	origBlue := colorBlue
-	origCyan := colorCyan
+	origReset := ColorReset
+	origRed := ColorRed
+	origYellow := ColorYellow
+	origBlue := ColorBlue
+	origCyan := ColorCyan
 
 	os.Setenv("NO_COLOR", "1")
+	defer os.Unsetenv("NO_COLOR")
 
 	Init()
 
-	if colorReset != "" || colorRed != "" || colorYellow != "" || colorBlue != "" || colorCyan != "" {
+	if ColorReset != "" || ColorRed != "" || ColorYellow != "" || ColorBlue != "" || ColorCyan != "" {
 		t.Error("Colors should be empty strings when NO_COLOR is set")
 	}
 
-	colorReset = origReset
-	colorRed = origRed
-	colorYellow = origYellow
-	colorBlue = origBlue
-	colorCyan = origCyan
-
-	os.Unsetenv("NO_COLOR")
+	ColorReset = origReset
+	ColorRed = origRed
+	ColorYellow = origYellow
+	ColorBlue = origBlue
+	ColorCyan = origCyan
 }

@@ -41,7 +41,7 @@ const (
 	// ------------------------
 
 	// EnvVarRunnerServerURI is the env var for the URI of the runner's server.
-	// Used for monitoring the runner's health, typically at http://127.0.0.1:5680.
+	// Used for monitoring the runner's health, typically at http://127.0.0.1:5681.
 	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
 
 	// EnvVarRunnerServerEnabled is the env var for whether the runner's health
@@ -57,7 +57,7 @@ const (
 	defaultIdleTimeoutValue    = "15" // seconds
 	DefaultMainServerURI       = "http://127.0.0.1:5678"
 	DefaultTaskBrokerServerURI = "http://127.0.0.1:5679"
-	DefaultRunnerServerURI     = "http://127.0.0.1:5680"
+	DefaultRunnerServerURI     = "http://127.0.0.1:5681"
 )
 
 // AllowedOnly filters the current environment down to only those

@@ -22,7 +22,7 @@ CLI utility to launch [n8n task runners](https://docs.n8n.io/PENDING).
 
 ### Install
 
-- Install Node.js >=18.17 
+- Install Node.js >=18.17
 - Install n8n >= PENDING_VERSION
 - Download launcher binary from [releases page](https://github.com/n8n-io/task-runner-launcher/releases)
 
@@ -39,9 +39,7 @@ Sample config file:
       "runner-type": "javascript",
       "workdir": "/usr/local/bin",
       "command": "/usr/local/bin/node",
-      "args": [
-        "/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"
-      ],
+      "args": ["/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"],
       "allowed-env": [
         "PATH",
         "N8N_RUNNERS_GRANT_TOKEN",
@@ -75,7 +73,7 @@ To control the launcher's log level, set the `N8N_LAUNCHER_LOG_LEVEL` env var to
 
 ### Idle timeout
 
-If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.   
+If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.
 
 ## Usage
 
@@ -83,7 +81,7 @@ Once setup is complete, start the launcher:
 
 ```sh
 export N8N_RUNNERS_AUTH_TOKEN=...
-export N8N_RUNNERS_N8N_URI=... 
+export N8N_RUNNERS_N8N_URI=...
 ./task-runner-launcher javascript
 ```
 
@@ -106,7 +104,7 @@ sudo mv config.json /etc/n8n-task-runners.json
 
 ```sh
 export N8N_RUNNERS_ENABLED=true
-export N8N_RUNNERS_MODE=external 
+export N8N_RUNNERS_MODE=external
 export N8N_RUNNERS_LAUNCHER_PATH=...  # i.e. path/to/launcher/binary
 export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. random string
 pnpm start
@@ -123,9 +121,9 @@ make run
 
 ## Health check
 
-The launcher exposes a health check endpoint at `/healthz` on port `5681` for liveness checks. 
+The launcher exposes a health check endpoint at `/healthz` on port `5680` for liveness checks.
 
-To override the launcher health check port, set the `N8N_LAUNCHER_HEALTCHECK_PORT` env var. When overriding the default health check port, be mindful of port conflicts - the n8n main instance uses `5678` by default for its HTTP server and `5679` for its task runner server, and the runner uses `5680` by default for its healthcheck server.
+To override the launcher health check port, set the `N8N_LAUNCHER_HEALTCHECK_PORT` env var. When overriding the default health check port, be mindful of port conflicts - the n8n main instance uses `5678` by default for its HTTP server and `5679` for its task runner server, and the runner uses `5681` by default for its healthcheck server.
 
 ## Release
 
@@ -138,5 +136,5 @@ git push origin v1.2.0
 
 2. Publish a [GitHub release](https://github.com/n8n-io/task-runner-launcher/releases/new) with the tag. The [`release` workflow](./.github/workflows/release.yml) will build binaries for arm64 and amd64 and upload them to the release in the [releases page](https://github.com/n8n-io/task-runner-launcher/releases).
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Mark the GitHub release as `latest` and NOT as `pre-release` or the `release` workflow will not run.

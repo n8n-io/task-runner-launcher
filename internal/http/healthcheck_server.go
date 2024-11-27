@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultPort     = 5681
+	defaultPort     = 5680
 	portEnvVar      = "N8N_LAUNCHER_HEALTCHECK_PORT"
 	healthCheckPath = "/healthz"
 	readTimeout     = 1 * time.Second

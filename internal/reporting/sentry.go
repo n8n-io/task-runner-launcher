@@ -26,7 +26,7 @@ func Init() {
 		return
 	}
 
-	logs.Info("Initializing Sentry")
+	logs.Debug("Initializing Sentry")
 
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:           config.Dsn,

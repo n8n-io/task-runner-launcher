@@ -98,6 +98,11 @@ func randomID() string {
 	return hex.EncodeToString(b)
 }
 
+func isWsCloseError(err error) bool {
+	_, ok := err.(*websocket.CloseError)
+	return ok
+}
+
 // Handshake is the flow where the launcher connects via websocket with main,
 // registers with main's task broker, sends a non-expiring task offer to main, and
 // receives the accept for that offer from main. Note that the handshake completes
@@ -131,7 +136,7 @@ func Handshake(cfg HandshakeConfig) error {
 			err := wsConn.ReadJSON(&msg)
 			if err != nil {
 				switch {
-				case websocket.IsCloseError(err, websocket.CloseGoingAway):
+				case isWsCloseError(err):
 					errReceived <- errs.ErrServerDown
 				case err == websocket.ErrReadLimit:
 					errReceived <- errs.ErrWsMsgTooLarge

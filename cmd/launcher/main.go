@@ -9,6 +9,7 @@ import (
 	"task-runner-launcher/internal/commands"
 	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/sentry"
 )
 
 func main() {
@@ -26,6 +27,9 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	sentry.Init()
+	defer sentry.Close()
 
 	srv := http.NewHealthCheckServer()
 	go func() {

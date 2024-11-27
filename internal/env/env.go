@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -40,14 +41,6 @@ const (
 	//         runner
 	// ------------------------
 
-	// EnvVarRunnerServerURI is the env var for the URI of the runner's server.
-	// Used for monitoring the runner's health, typically at http://127.0.0.1:5681.
-	EnvVarRunnerServerURI = "N8N_RUNNER_URI"
-
-	// EnvVarRunnerServerEnabled is the env var for whether the runner's health
-	// check server should be started.
-	EnvVarRunnerServerEnabled = "N8N_RUNNERS_SERVER_ENABLED"
-
 	// EnvVarIdleTimeout is the env var for how long (in seconds) a runner may be
 	// idle for before exit.
 	EnvVarIdleTimeout = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
@@ -57,7 +50,9 @@ const (
 	defaultIdleTimeoutValue    = "15" // seconds
 	DefaultMainServerURI       = "http://127.0.0.1:5678"
 	DefaultTaskBrokerServerURI = "http://127.0.0.1:5679"
-	DefaultRunnerServerURI     = "http://127.0.0.1:5681"
+
+	// URI of the runner. Used for monitoring the runner's health
+	RunnerServerURI = "http://127.0.0.1:5681"
 )
 
 // AllowedOnly filters the current environment down to only those
@@ -79,6 +74,8 @@ func AllowedOnly(allowed []string) []string {
 			}
 		}
 	}
+
+	sort.Strings(filtered) // ensure consistent order
 
 	return filtered
 }
@@ -127,7 +124,6 @@ type EnvConfig struct {
 	AuthToken           string
 	MainServerURI       string
 	TaskBrokerServerURI string
-	RunnerServerURI     string
 }
 
 // FromEnv retrieves vars from the environment, validates their values, and
@@ -138,7 +134,6 @@ func FromEnv() (*EnvConfig, error) {
 	authToken := os.Getenv(EnvVarAuthToken)
 	mainServerURI := os.Getenv(EnvVarMainServerURI)
 	taskBrokerServerURI := os.Getenv(EnvVarTaskBrokerServerURI)
-	runnerServerURI := os.Getenv(EnvVarRunnerServerURI)
 	idleTimeout := os.Getenv(EnvVarIdleTimeout)
 
 	if authToken == "" {
@@ -148,12 +143,6 @@ func FromEnv() (*EnvConfig, error) {
 	if mainServerURI == "" {
 		mainServerURI = DefaultMainServerURI
 	} else if err := validateURL(mainServerURI, EnvVarMainServerURI); err != nil {
-		errs = append(errs, err)
-	}
-
-	if runnerServerURI == "" {
-		runnerServerURI = DefaultRunnerServerURI
-	} else if err := validateURL(runnerServerURI, EnvVarRunnerServerURI); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -176,12 +165,9 @@ func FromEnv() (*EnvConfig, error) {
 		return nil, errors.Join(errs...)
 	}
 
-	os.Setenv(EnvVarRunnerServerEnabled, "true")
-
 	return &EnvConfig{
 		AuthToken:           authToken,
 		MainServerURI:       mainServerURI,
 		TaskBrokerServerURI: taskBrokerServerURI,
-		RunnerServerURI:     runnerServerURI,
 	}, nil
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestCheckUntilN8nReady(t *testing.T) {
+func TestCheckUntilBrokerReady(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverFn      func(http.ResponseWriter, *http.Request, int)
@@ -36,7 +36,7 @@ func TestCheckUntilN8nReady(t *testing.T) {
 
 			done := make(chan error)
 			go func() {
-				done <- CheckUntilN8nReady(server.URL)
+				done <- CheckUntilBrokerReady(server.URL)
 			}()
 
 			select {
@@ -96,7 +96,7 @@ func TestSendReadinessRequest(t *testing.T) {
 			}))
 			defer server.Close()
 
-			resp, err := sendReadinessRequest(server.URL)
+			resp, err := sendHealthRequest(server.URL)
 
 			if err == nil {
 				defer resp.Body.Close()

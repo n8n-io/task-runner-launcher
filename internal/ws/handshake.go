@@ -55,7 +55,7 @@ func validateConfig(cfg HandshakeConfig) error {
 func buildWebsocketURL(taskBrokerServerURI, runnerID string) (*url.URL, error) {
 	u, err := url.Parse(taskBrokerServerURI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Task Broker URI: %w", err)
+		return nil, fmt.Errorf("invalid task broker URI: %w", err)
 	}
 
 	if u.RawQuery != "" {

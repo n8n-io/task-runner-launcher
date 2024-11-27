@@ -39,7 +39,7 @@ func Init() {
 	})
 
 	if err != nil {
-		log.Fatalf("sentry.Init: %s", err)
+		logs.Errorf("Sentry failed to initialize: %s", err)
 	}
 }
 

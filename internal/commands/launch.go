@@ -13,6 +13,10 @@ import (
 	"task-runner-launcher/internal/ws"
 )
 
+type Command interface {
+	Execute() error
+}
+
 type LaunchCommand struct {
 	RunnerType string
 }

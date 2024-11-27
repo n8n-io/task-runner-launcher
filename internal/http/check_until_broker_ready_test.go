@@ -1,13 +1,14 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
 
-func TestCheckUntilBrokerReady(t *testing.T) {
+func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverFn      func(http.ResponseWriter, *http.Request, int)
@@ -55,6 +56,54 @@ func TestCheckUntilBrokerReady(t *testing.T) {
 
 			case <-time.After(tt.timeout):
 				t.Errorf("test timed out after %v", tt.timeout)
+			}
+		})
+	}
+}
+
+func TestCheckUntilBrokerReadyErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler func(w http.ResponseWriter, r *http.Request)
+	}{
+		{
+			name:    "error - closed server",
+			handler: func(_ http.ResponseWriter, _ *http.Request) {},
+		},
+		{
+			name: "error - bad status code",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(tt.handler))
+			if tt.name == "error - closed server" {
+				server.Close()
+			} else {
+				defer server.Close()
+			}
+
+			// CheckUntilBrokerReady retries forever, so set up
+			// - context timeout to show retry loop keeps running without returning
+			// - channel to catch any unexpected early returns
+			// - goroutine to prevent this infinite retries from blocking tests
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			brokerUnexpectedlyReady := make(chan error)
+			go func() {
+				brokerUnexpectedlyReady <- CheckUntilBrokerReady(server.URL)
+			}()
+
+			select {
+			case <-ctx.Done():
+				// expected timeout
+			case err := <-brokerUnexpectedlyReady:
+				t.Errorf("expected timeout, got: %v", err)
 			}
 		})
 	}

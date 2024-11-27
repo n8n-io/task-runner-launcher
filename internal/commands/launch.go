@@ -79,7 +79,7 @@ func (l *LaunchCommand) Execute() error {
 
 	// 4. wait for n8n instance to be ready
 
-	if err := http.WaitForN8nReady(envCfg.MainServerURI); err != nil {
+	if err := http.CheckUntilN8nReady(envCfg.MainServerURI); err != nil {
 		return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
 	}
 

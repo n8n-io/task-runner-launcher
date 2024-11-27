@@ -34,34 +34,11 @@ func (l *LaunchCommand) Execute() error {
 		return fmt.Errorf("env vars failed validation: %w", err)
 	}
 
-	// 1. read configuration
+	// 1. read runner config
 
-	fileCfg, err := config.ReadConfig()
+	runnerCfg, err := config.GetRunnerConfig(l.RunnerType)
 	if err != nil {
-		logs.Errorf("Error reading config file: %v", err)
-		return err
-	}
-
-	var runnerCfg config.TaskRunnerConfig
-	found := false
-	for _, r := range fileCfg.TaskRunners {
-		if r.RunnerType == l.RunnerType {
-			runnerCfg = r
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("config file does not contain requested runner type: %s", l.RunnerType)
-	}
-
-	taskRunnersNum := len(fileCfg.TaskRunners)
-
-	if taskRunnersNum == 1 {
-		logs.Debug("Loaded config file loaded with a single runner config")
-	} else {
-		logs.Debugf("Loaded config file with %d runner configs", taskRunnersNum)
+		return fmt.Errorf("failed to get runner config: %w", err)
 	}
 
 	// 2. change into working directory

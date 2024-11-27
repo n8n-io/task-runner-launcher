@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"task-runner-launcher/internal/logs"
 )
 
 const configPath = "/etc/n8n-task-runners.json"
@@ -30,7 +31,7 @@ type LauncherConfig struct {
 	TaskRunners []TaskRunnerConfig `json:"task-runners"`
 }
 
-func ReadConfig() (*LauncherConfig, error) {
+func readConfig() (*LauncherConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file at %s: %w", configPath, err)
@@ -46,4 +47,35 @@ func ReadConfig() (*LauncherConfig, error) {
 	}
 
 	return &config, nil
+}
+
+// GetRunnerConfig retrieves and validates the runner configuration for a given runner type.
+func GetRunnerConfig(runnerType string) (*TaskRunnerConfig, error) {
+	fileCfg, err := readConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error reading config file: %w", err)
+	}
+
+	var runnerCfg TaskRunnerConfig
+	found := false
+	for _, r := range fileCfg.TaskRunners {
+		if r.RunnerType == runnerType {
+			runnerCfg = r
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("config file does not contain requested runner type: %s", runnerType)
+	}
+
+	taskRunnersNum := len(fileCfg.TaskRunners)
+	if taskRunnersNum == 1 {
+		logs.Debug("Loaded config file with a single runner config")
+	} else {
+		logs.Debugf("Loaded config file with %d runner configs", taskRunnersNum)
+	}
+
+	return &runnerCfg, nil
 }

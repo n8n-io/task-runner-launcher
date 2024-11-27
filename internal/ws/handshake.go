@@ -42,7 +42,7 @@ func validateConfig(cfg HandshakeConfig) error {
 	}
 
 	if cfg.TaskBrokerServerURI == "" {
-		return fmt.Errorf("n8n URI is missing")
+		return fmt.Errorf("task broker URI is missing")
 	}
 
 	if cfg.GrantToken == "" {
@@ -55,11 +55,11 @@ func validateConfig(cfg HandshakeConfig) error {
 func buildWebsocketURL(taskBrokerServerURI, runnerID string) (*url.URL, error) {
 	u, err := url.Parse(taskBrokerServerURI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid n8n URI: %w", err)
+		return nil, fmt.Errorf("invalid task broker URI: %w", err)
 	}
 
 	if u.RawQuery != "" {
-		return nil, fmt.Errorf("n8n URI must have no query params")
+		return nil, fmt.Errorf("task broker URI must have no query params")
 	}
 
 	u.Scheme = "ws"
@@ -103,10 +103,10 @@ func isWsCloseError(err error) bool {
 	return ok
 }
 
-// Handshake is the flow where the launcher connects via websocket with main,
-// registers with main's task broker, sends a non-expiring task offer to main, and
-// receives the accept for that offer from main. Note that the handshake completes
-// only once this task offer is accepted, which may take time.
+// Handshake is the flow where the launcher connects via websocket with task broker,
+// registers, sends a non-expiring task offer, and receives the accept for that
+// offer. Note that the handshake completes only once this task offer is accepted,
+// which may take time.
 func Handshake(cfg HandshakeConfig) error {
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("received invalid handshake config: %w", err)

@@ -26,15 +26,12 @@ const (
 	EnvVarGrantToken = "N8N_RUNNERS_GRANT_TOKEN"
 
 	// ------------------------
-	//        n8n main
+	//        task broker
 	// ------------------------
 
-	// EnvVarMainServerURI is the env var for the URI of the n8n main instance's
-	// main server, typically at http://127.0.0.1:5678.
-	EnvVarMainServerURI = "N8N_MAIN_URI"
-
-	// EnvVarTaskBrokerServerURI is the env var for the URI of the n8n main
-	// instance's task broker server, typically at http://127.0.0.1:5679.
+	// EnvVarTaskBrokerServerURI is the env var for the URI of the
+	// task broker server, typically at http://127.0.0.1:5679. Typically
+	// the broker server runs inside an n8n instance (main or worker).
 	EnvVarTaskBrokerServerURI = "N8N_TASK_BROKER_URI"
 
 	// ------------------------
@@ -122,7 +119,6 @@ func validateURL(urlStr string, fieldName string) error {
 // nolint:revive // exported
 type EnvConfig struct {
 	AuthToken           string
-	MainServerURI       string
 	TaskBrokerServerURI string
 }
 
@@ -132,18 +128,11 @@ func FromEnv() (*EnvConfig, error) {
 	var errs []error
 
 	authToken := os.Getenv(EnvVarAuthToken)
-	mainServerURI := os.Getenv(EnvVarMainServerURI)
 	taskBrokerServerURI := os.Getenv(EnvVarTaskBrokerServerURI)
 	idleTimeout := os.Getenv(EnvVarIdleTimeout)
 
 	if authToken == "" {
 		errs = append(errs, fmt.Errorf("%s is required", EnvVarAuthToken))
-	}
-
-	if mainServerURI == "" {
-		mainServerURI = DefaultMainServerURI
-	} else if err := validateURL(mainServerURI, EnvVarMainServerURI); err != nil {
-		errs = append(errs, err)
 	}
 
 	if taskBrokerServerURI == "" {
@@ -167,7 +156,6 @@ func FromEnv() (*EnvConfig, error) {
 
 	return &EnvConfig{
 		AuthToken:           authToken,
-		MainServerURI:       mainServerURI,
 		TaskBrokerServerURI: taskBrokerServerURI,
 	}, nil
 }

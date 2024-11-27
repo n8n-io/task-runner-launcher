@@ -24,20 +24,20 @@ var levelMap = map[string]Level{
 }
 
 var (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorCyan   = "\033[36m"
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorCyan   = "\033[36m"
 )
 
-func init() {
+func Init() {
 	if os.Getenv("NO_COLOR") != "" {
-		colorReset = ""
-		colorRed = ""
-		colorYellow = ""
-		colorBlue = ""
-		colorCyan = ""
+		ColorReset = ""
+		ColorRed = ""
+		ColorYellow = ""
+		ColorBlue = ""
+		ColorCyan = ""
 	}
 }
 
@@ -67,49 +67,49 @@ var logger = NewLogger(InfoLevel)
 
 func (l *Logger) Debug(msg string) {
 	if l.level <= DebugLevel {
-		l.debug.Printf("%sDEBUG %s%s", colorCyan, msg, colorReset)
+		l.debug.Printf("%sDEBUG %s%s", ColorCyan, msg, ColorReset)
 	}
 }
 
 func (l *Logger) Debugf(msg string, xs ...interface{}) {
 	if l.level <= DebugLevel {
-		l.debug.Printf(fmt.Sprintf("%sDEBUG %s%s", colorCyan, msg, colorReset), xs...)
+		l.debug.Printf(fmt.Sprintf("%sDEBUG %s%s", ColorCyan, msg, ColorReset), xs...)
 	}
 }
 
 func (l *Logger) Info(msg string) {
 	if l.level <= InfoLevel {
-		l.info.Printf("%sINFO  %s%s", colorBlue, msg, colorReset)
+		l.info.Printf("%sINFO  %s%s", ColorBlue, msg, ColorReset)
 	}
 }
 
 func (l *Logger) Infof(msg string, xs ...interface{}) {
 	if l.level <= InfoLevel {
-		l.info.Printf(fmt.Sprintf("%sINFO  %s%s", colorBlue, msg, colorReset), xs...)
+		l.info.Printf(fmt.Sprintf("%sINFO  %s%s", ColorBlue, msg, ColorReset), xs...)
 	}
 }
 
 func (l *Logger) Warn(msg string) {
 	if l.level <= WarnLevel {
-		l.warn.Printf("%sWARN %s%s", colorYellow, msg, colorReset)
+		l.warn.Printf("%sWARN %s%s", ColorYellow, msg, ColorReset)
 	}
 }
 
 func (l *Logger) Warnf(msg string, xs ...interface{}) {
 	if l.level <= WarnLevel {
-		l.warn.Printf(fmt.Sprintf("%sWARN %s%s", colorYellow, msg, colorReset), xs...)
+		l.warn.Printf(fmt.Sprintf("%sWARN %s%s", ColorYellow, msg, ColorReset), xs...)
 	}
 }
 
 func (l *Logger) Error(msg string) {
 	if l.level <= ErrorLevel {
-		l.warn.Printf("%sERROR %s%s", colorRed, msg, colorReset)
+		l.warn.Printf("%sERROR %s%s", ColorRed, msg, ColorReset)
 	}
 }
 
 func (l *Logger) Errorf(msg string, xs ...interface{}) {
 	if l.level <= ErrorLevel {
-		l.err.Printf(fmt.Sprintf("%sERROR %s%s", colorRed, msg, colorReset), xs...)
+		l.err.Printf(fmt.Sprintf("%sERROR %s%s", ColorRed, msg, ColorReset), xs...)
 	}
 }
 

@@ -60,10 +60,10 @@ func (l *LaunchCommand) Execute() error {
 	logs.Debugf("Filtered environment variables")
 
 	for {
-		// 4. check until n8n instance is ready
+		// 4. check until task broker is ready
 
-		if err := http.CheckUntilN8nReady(envCfg.MainServerURI); err != nil {
-			return fmt.Errorf("encountered error while waiting for n8n to be ready: %w", err)
+		if err := http.CheckUntilBrokerReady(envCfg.TaskBrokerServerURI); err != nil {
+			return fmt.Errorf("encountered error while waiting for broker to be ready: %w", err)
 		}
 
 		// 5. fetch grant token for launcher
@@ -86,9 +86,9 @@ func (l *LaunchCommand) Execute() error {
 		err = ws.Handshake(handshakeCfg)
 		switch {
 		case errors.Is(err, errs.ErrServerDown):
-			logs.Warn("n8n is down, launcher will try to reconnect...")
+			logs.Warn("Task broker is down, launcher will try to reconnect...")
 			time.Sleep(time.Second * 5)
-			continue // back to checking until n8n ready
+			continue // back to checking until broker ready
 		case err != nil:
 			return fmt.Errorf("handshake failed: %w", err)
 		}

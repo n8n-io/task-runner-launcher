@@ -16,6 +16,10 @@ import (
 	"time"
 )
 
+type Command interface {
+	Execute() error
+}
+
 type LaunchCommand struct {
 	RunnerType string
 }

@@ -1,4 +1,4 @@
-package sentry
+package reporting
 
 import (
 	"os"

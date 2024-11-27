@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
-	"task-runner-launcher/internal/launcherr"
+	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
 
 	"github.com/gorilla/websocket"
@@ -132,9 +132,9 @@ func Handshake(cfg HandshakeConfig) error {
 			if err != nil {
 				switch {
 				case websocket.IsCloseError(err, websocket.CloseGoingAway):
-					errReceived <- launcherr.ErrServerDown
+					errReceived <- errs.ErrServerDown
 				case err == websocket.ErrReadLimit:
-					errReceived <- launcherr.ErrWsMsgTooLarge
+					errReceived <- errs.ErrWsMsgTooLarge
 				default:
 					errReceived <- fmt.Errorf("failed to read ws message: %w", err)
 				}

@@ -10,8 +10,8 @@ import (
 	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
+	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/http"
-	"task-runner-launcher/internal/launcherr"
 	"task-runner-launcher/internal/logs"
 	"time"
 )
@@ -102,7 +102,7 @@ func (l *LaunchCommand) Execute() error {
 
 		err = auth.Handshake(handshakeCfg)
 		switch {
-		case errors.Is(err, launcherr.ErrServerDown):
+		case errors.Is(err, errs.ErrServerDown):
 			logs.Warn("n8n is down, launcher will try to reconnect...")
 			time.Sleep(time.Second * 5)
 			continue // back to checking until n8n ready

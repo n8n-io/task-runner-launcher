@@ -1,4 +1,4 @@
-package launcherr
+package errs
 
 import "errors"
 

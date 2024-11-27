@@ -38,20 +38,16 @@ func TestConfigFromEnv(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Set environment variables
 			for key, value := range test.envVars {
 				os.Setenv(key, value)
 			}
 
-			// Call the function
 			config := ConfigFromEnv()
 
-			// Validate the result
 			if config != test.expectedConfig {
 				t.Errorf("got %+v, want %+v", config, test.expectedConfig)
 			}
 
-			// Clean up environment variables
 			for key := range test.envVars {
 				os.Unsetenv(key)
 			}

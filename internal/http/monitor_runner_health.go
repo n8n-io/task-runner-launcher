@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const (
+var (
 	// healthCheckTimeout is the timeout (in seconds) for the launcher's health
 	// check request to the runner.
 	healthCheckTimeout = 5 * time.Second

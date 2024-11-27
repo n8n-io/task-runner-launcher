@@ -117,7 +117,7 @@ func TestGetRunnerConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.configContent != "" {
-				err := os.WriteFile(configPath, []byte(tt.configContent), 0644)
+				err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
 				if err != nil {
 					t.Fatalf("Failed to write test config file: %v", err)
 				}

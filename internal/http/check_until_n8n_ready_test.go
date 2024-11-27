@@ -89,8 +89,8 @@ func TestSendReadinessRequest(t *testing.T) {
 				if r.Method != http.MethodGet {
 					t.Errorf("expected GET request, got %s", r.Method)
 				}
-				if r.URL.Path != "/healthz/readiness" {
-					t.Errorf("expected /healthz/readiness path, got %s", r.URL.Path)
+				if r.URL.Path != "/healthz" {
+					t.Errorf("expected /healthz path, got %s", r.URL.Path)
 				}
 				w.WriteHeader(tt.serverResponse)
 			}))

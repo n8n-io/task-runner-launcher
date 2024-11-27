@@ -29,7 +29,7 @@ const (
 	//        task broker
 	// ------------------------
 
-	// EnvVarTaskBrokerServerURI is the env var for the URI of the n8n
+	// EnvVarTaskBrokerServerURI is the env var for the URI of the
 	// task broker server, typically at http://127.0.0.1:5679. Typically
 	// the broker server runs inside an n8n instance (main or worker).
 	EnvVarTaskBrokerServerURI = "N8N_TASK_BROKER_URI"

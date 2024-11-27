@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const (
+var (
 	defaultMaxRetryTime           = 60 * time.Second
 	defaultMaxRetries             = 100
 	defaultWaitTimeBetweenRetries = 5 * time.Second

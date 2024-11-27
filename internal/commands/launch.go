@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
 	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/ws"
 )
 
 type LaunchCommand struct {
@@ -91,13 +91,13 @@ func (l *LaunchCommand) Execute() error {
 
 		// 6. connect to main and wait for task offer to be accepted
 
-		handshakeCfg := auth.HandshakeConfig{
+		handshakeCfg := ws.HandshakeConfig{
 			TaskType:            l.RunnerType,
 			TaskBrokerServerURI: envCfg.TaskBrokerServerURI,
 			GrantToken:          launcherGrantToken,
 		}
 
-		if err := auth.Handshake(handshakeCfg); err != nil {
+		if err := ws.Handshake(handshakeCfg); err != nil {
 			return fmt.Errorf("handshake failed: %w", err)
 		}
 

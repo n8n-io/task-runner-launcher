@@ -1,4 +1,4 @@
-package auth
+package ws
 
 import (
 	"crypto/rand"

@@ -7,12 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"task-runner-launcher/internal/auth"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/ws"
 	"time"
 )
 
@@ -94,13 +94,13 @@ func (l *LaunchCommand) Execute() error {
 
 		// 6. connect to main and wait for task offer to be accepted
 
-		handshakeCfg := auth.HandshakeConfig{
+		handshakeCfg := ws.HandshakeConfig{
 			TaskType:            l.RunnerType,
 			TaskBrokerServerURI: envCfg.TaskBrokerServerURI,
 			GrantToken:          launcherGrantToken,
 		}
 
-		err = auth.Handshake(handshakeCfg)
+		err = ws.Handshake(handshakeCfg)
 		switch {
 		case errors.Is(err, errs.ErrServerDown):
 			logs.Warn("n8n is down, launcher will try to reconnect...")

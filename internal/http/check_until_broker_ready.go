@@ -32,7 +32,7 @@ func CheckUntilBrokerReady(taskBrokerURI string) error {
 	readinessCheck := func() (string, error) {
 		resp, err := sendHealthRequest(taskBrokerURI)
 		if err != nil {
-			return "", fmt.Errorf("task broker readiness check failed with error: %w", err)
+			return "", fmt.Errorf("task broker health check failed with error: %w", err)
 		}
 		defer resp.Body.Close()
 

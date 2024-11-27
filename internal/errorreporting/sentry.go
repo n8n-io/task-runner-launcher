@@ -1,4 +1,4 @@
-package reporting
+package errorreporting
 
 import (
 	"os"

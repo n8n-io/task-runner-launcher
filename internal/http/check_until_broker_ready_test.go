@@ -72,7 +72,7 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 		},
 		{
 			name: "error - bad status code",
-			handler: func(w http.ResponseWriter, r *http.Request) {
+			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			},
 		},

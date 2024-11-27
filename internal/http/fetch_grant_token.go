@@ -49,7 +49,7 @@ func sendGrantTokenRequest(taskBrokerServerURI, authToken string) (string, error
 }
 
 // FetchGrantToken exchanges the launcher's auth token for a single-use
-// grant token from the n8n main instance. In case the n8n main instance is
+// grant token from the task broker. In case the task broker is
 // temporarily unavailable, this exchange is retried a limited number of times.
 func FetchGrantToken(taskBrokerServerURI, authToken string) (string, error) {
 	grantTokenFetch := func() (string, error) {

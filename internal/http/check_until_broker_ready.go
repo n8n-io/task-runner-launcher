@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
-	url := fmt.Sprintf("%s/healthz/readiness", n8nMainServerURI)
+func sendHealthRequest(taskBrokerURI string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/healthz", taskBrokerURI)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,
@@ -23,16 +23,16 @@ func sendReadinessRequest(n8nMainServerURI string) (*http.Response, error) {
 	return client.Do(req)
 }
 
-// CheckUntilN8nReady checks forever until the n8n main instance is ready, i.e.
+// CheckUntilBrokerReady checks forever until the task broker is ready, i.e.
 // until its DB is connected and migrated. In case of long-running migrations,
 // readiness may take a long time. Returns nil when ready.
-func CheckUntilN8nReady(n8nMainServerURI string) error {
-	logs.Info("Waiting for n8n to be ready...")
+func CheckUntilBrokerReady(taskBrokerURI string) error {
+	logs.Info("Waiting for task broker to be ready...")
 
 	readinessCheck := func() (string, error) {
-		resp, err := sendReadinessRequest(n8nMainServerURI)
+		resp, err := sendHealthRequest(taskBrokerURI)
 		if err != nil {
-			return "", fmt.Errorf("n8n readiness check failed with error: %w", err)
+			return "", fmt.Errorf("task broker readiness check failed with error: %w", err)
 		}
 		defer resp.Body.Close()
 
@@ -47,7 +47,7 @@ func CheckUntilN8nReady(n8nMainServerURI string) error {
 		return err
 	}
 
-	logs.Info("n8n instance is ready")
+	logs.Info("Task broker is ready")
 
 	return nil
 }

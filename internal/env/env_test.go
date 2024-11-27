@@ -154,50 +154,25 @@ func TestFromEnv(t *testing.T) {
 			name: "valid custom configuration",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://localhost:9000",
 				EnvVarTaskBrokerServerURI: "http://localhost:9001",
 				EnvVarIdleTimeout:         "30",
 			},
 			expected: &EnvConfig{
 				AuthToken:           "token123",
-				MainServerURI:       "http://localhost:9000",
 				TaskBrokerServerURI: "http://localhost:9001",
 			},
 		},
 		{
 			name: "missing auth token",
 			envVars: map[string]string{
-				EnvVarMainServerURI:       "http://localhost:5678",
 				EnvVarTaskBrokerServerURI: "http://localhost:5679",
 			},
 			expectError: true,
-		},
-		{
-			name: "invalid main server URI",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://\\invalid:5678",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-			},
-			expectError: true,
-		},
-		{
-			name: "missing main server URI",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-			},
-			expected: &EnvConfig{
-				AuthToken:           "token123",
-				MainServerURI:       DefaultMainServerURI,
-				TaskBrokerServerURI: "http://localhost:5679",
-			},
 		},
 		{
 			name: "invalid task broker server URI",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://localhost:5678",
 				EnvVarTaskBrokerServerURI: "http://\\invalid:5679",
 			},
 			expectError: true,
@@ -205,12 +180,10 @@ func TestFromEnv(t *testing.T) {
 		{
 			name: "missing task broker server URI",
 			envVars: map[string]string{
-				EnvVarAuthToken:     "token123",
-				EnvVarMainServerURI: "http://localhost:5678",
+				EnvVarAuthToken: "token123",
 			},
 			expected: &EnvConfig{
 				AuthToken:           "token123",
-				MainServerURI:       "http://localhost:5678",
 				TaskBrokerServerURI: DefaultTaskBrokerServerURI,
 			},
 		},
@@ -218,8 +191,7 @@ func TestFromEnv(t *testing.T) {
 			name: "missing scheme in 127.0.0.1 URI",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "127.0.0.1:5678",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
+				EnvVarTaskBrokerServerURI: "127.0.0.1:5679",
 			},
 			expectError: true,
 		},
@@ -227,8 +199,7 @@ func TestFromEnv(t *testing.T) {
 			name: "missing scheme in localhost URI",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "localhost:5678",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
+				EnvVarTaskBrokerServerURI: "localhost:5679",
 			},
 			expectError: true,
 		},
@@ -236,7 +207,6 @@ func TestFromEnv(t *testing.T) {
 			name: "invalid idle timeout",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://localhost:5678",
 				EnvVarTaskBrokerServerURI: "http://localhost:5679",
 				EnvVarIdleTimeout:         "invalid",
 			},
@@ -246,7 +216,6 @@ func TestFromEnv(t *testing.T) {
 			name: "negative idle timeout",
 			envVars: map[string]string{
 				EnvVarAuthToken:           "token123",
-				EnvVarMainServerURI:       "http://localhost:5678",
 				EnvVarTaskBrokerServerURI: "http://localhost:5679",
 				EnvVarIdleTimeout:         "-1",
 			},

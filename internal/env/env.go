@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -79,6 +80,8 @@ func AllowedOnly(allowed []string) []string {
 			}
 		}
 	}
+
+	sort.Strings(filtered) // ensure consistent order
 
 	return filtered
 }

@@ -8,18 +8,18 @@ import (
 
 func setRetryTimings(t *testing.T) func() {
 	t.Helper()
-	origMaxRetryTime := defaultMaxRetryTime
-	origMaxRetries := defaultMaxRetries
-	origWaitTime := defaultWaitTimeBetweenRetries
+	origMaxRetryTime := DefaultMaxRetryTime
+	origMaxRetries := DefaultMaxRetries
+	origWaitTime := DefaultWaitTimeBetweenRetries
 
-	defaultMaxRetryTime = 100 * time.Millisecond
-	defaultMaxRetries = 3
-	defaultWaitTimeBetweenRetries = 10 * time.Millisecond
+	DefaultMaxRetryTime = 100 * time.Millisecond
+	DefaultMaxRetries = 3
+	DefaultWaitTimeBetweenRetries = 10 * time.Millisecond
 
 	return func() {
-		defaultMaxRetryTime = origMaxRetryTime
-		defaultMaxRetries = origMaxRetries
-		defaultWaitTimeBetweenRetries = origWaitTime
+		DefaultMaxRetryTime = origMaxRetryTime
+		DefaultMaxRetries = origMaxRetries
+		DefaultWaitTimeBetweenRetries = origWaitTime
 	}
 }
 
@@ -131,14 +131,14 @@ func TestLimitedRetry(t *testing.T) {
 			operationFn: func() (string, error) {
 				return "", errors.New("persistent error")
 			},
-			expectedCalls: defaultMaxRetries,
+			expectedCalls: DefaultMaxRetries,
 			expectError:   true,
 			expectedValue: "",
 		},
 		{
 			name: "fails after max retry time",
 			operationFn: func() (string, error) {
-				time.Sleep(defaultMaxRetryTime + time.Second)
+				time.Sleep(DefaultMaxRetryTime + time.Second)
 				return "", errors.New("timeout error")
 			},
 			expectedCalls: 1,

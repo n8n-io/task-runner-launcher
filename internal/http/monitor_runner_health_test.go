@@ -35,15 +35,16 @@ func TestSendRunnerHealthCheckRequest(t *testing.T) {
 func setHealthCheckValues(t *testing.T) func() {
 	t.Helper()
 
-	originalInterval := healthCheckInterval
+	originalHealthCheckInterval := healthCheckInterval
 	originalInitialDelay := initialDelay
 	originalMaxFailures := healthCheckMaxFailures
+
 	healthCheckInterval = 50 * time.Millisecond
 	initialDelay = 0
 	healthCheckMaxFailures = 2
 
 	return func() {
-		healthCheckInterval = originalInterval
+		healthCheckInterval = originalHealthCheckInterval
 		initialDelay = originalInitialDelay
 		healthCheckMaxFailures = originalMaxFailures
 	}
@@ -53,10 +54,10 @@ func TestMonitorRunnerHealth(t *testing.T) {
 	restoreFn := setHealthCheckValues(t)
 	defer restoreFn()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	defer srv.Close()
 
 	cmd := exec.Command("sleep", "1")
 	if err := cmd.Start(); err != nil {
@@ -71,10 +72,10 @@ func TestMonitorRunnerHealth(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	var wg sync.WaitGroup
 
-	MonitorRunnerHealth(ctx, cmd, server.URL, &wg)
+	MonitorRunnerHealth(ctx, cmd, srv.URL, &wg)
 
 	<-ctx.Done()
 	cancel()
@@ -87,8 +88,8 @@ func TestMonitorRunnerHealth(t *testing.T) {
 
 	select {
 	case <-waitCh:
-		// monitor goroutine was shut down within timeout
-	case <-time.After(500 * time.Millisecond):
+		// monitoring goroutine was shut down within timeout
+	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Test timed out waiting for monitor to stop")
 	}
 }
@@ -97,10 +98,10 @@ func TestMonitorRunnerHealthFailure(t *testing.T) {
 	restoreFn := setHealthCheckValues(t)
 	defer restoreFn()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer server.Close()
+	defer srv.Close()
 
 	cmd := exec.Command("sleep", "1")
 	if err := cmd.Start(); err != nil {
@@ -115,12 +116,12 @@ func TestMonitorRunnerHealthFailure(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	var wg sync.WaitGroup
 
-	MonitorRunnerHealth(ctx, cmd, server.URL, &wg)
+	MonitorRunnerHealth(ctx, cmd, srv.URL, &wg)
 
 	processCh := make(chan struct{})
 	go func() {
@@ -145,8 +146,8 @@ func TestMonitorRunnerHealthFailure(t *testing.T) {
 
 	select {
 	case <-waitCh:
-		// monitor goroutine was shut down within timeout
-	case <-time.After(500 * time.Millisecond):
+		// monitoring goroutine was shut down within timeout
+	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Test timed out waiting for monitor to stop")
 	}
 }

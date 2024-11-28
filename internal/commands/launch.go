@@ -20,66 +20,46 @@ type Command interface {
 	Execute() error
 }
 
-type LaunchCommand struct {
-	RunnerType string
-}
+type LaunchCommand struct{}
 
-func (l *LaunchCommand) Execute() error {
-	logs.Info("Starting to execute `launch` command")
+func (l *LaunchCommand) Execute(cfg *config.Config) error {
+	logs.Info("Starting launcher...")
 
-	// 0. validate env vars
+	// 1. change into working directory
 
-	envCfg, err := env.FromEnv()
-	if err != nil {
-		return fmt.Errorf("env vars failed validation: %w", err)
+	if err := os.Chdir(cfg.Runner.WorkDir); err != nil {
+		return fmt.Errorf("failed to chdir into configured dir (%s): %w", cfg.Runner.WorkDir, err)
 	}
 
-	// 1. read runner config
+	logs.Debugf("Changed into working directory: %s", cfg.Runner.WorkDir)
 
-	runnerCfg, err := config.GetRunnerConfig(l.RunnerType)
-	if err != nil {
-		return fmt.Errorf("failed to get runner config: %w", err)
-	}
+	// 2. prepare env vars to pass to runner
 
-	// 2. change into working directory
+	runnerEnv := env.PrepareRunnerEnv(cfg)
 
-	if err := os.Chdir(runnerCfg.WorkDir); err != nil {
-		return fmt.Errorf("failed to chdir into configured dir (%s): %w", runnerCfg.WorkDir, err)
-	}
-
-	logs.Debugf("Changed into working directory: %s", runnerCfg.WorkDir)
-
-	// 3. filter environment variables
-
-	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM", env.EnvVarIdleTimeout}
-	allowedEnvs := append(defaultEnvs, runnerCfg.AllowedEnv...)
-	runnerEnv := env.AllowedOnly(allowedEnvs)
-	// Static values
-	runnerEnv = append(runnerEnv, "N8N_RUNNERS_SERVER_ENABLED=true")
-
-	logs.Debugf("Filtered environment variables")
+	logs.Debugf("Prepared env vars for runner")
 
 	for {
-		// 4. check until task broker is ready
+		// 3. check until task broker is ready
 
-		if err := http.CheckUntilBrokerReady(envCfg.TaskBrokerServerURI); err != nil {
+		if err := http.CheckUntilBrokerReady(cfg.TaskBrokerURI); err != nil {
 			return fmt.Errorf("encountered error while waiting for broker to be ready: %w", err)
 		}
 
-		// 5. fetch grant token for launcher
+		// 4. fetch grant token for launcher
 
-		launcherGrantToken, err := http.FetchGrantToken(envCfg.TaskBrokerServerURI, envCfg.AuthToken)
+		launcherGrantToken, err := http.FetchGrantToken(cfg.TaskBrokerURI, cfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
 
 		logs.Debug("Fetched grant token for launcher")
 
-		// 6. connect to main and wait for task offer to be accepted
+		// 5. connect to main and wait for task offer to be accepted
 
 		handshakeCfg := ws.HandshakeConfig{
-			TaskType:            l.RunnerType,
-			TaskBrokerServerURI: envCfg.TaskBrokerServerURI,
+			TaskType:            cfg.Runner.RunnerType,
+			TaskBrokerServerURI: cfg.TaskBrokerURI,
 			GrantToken:          launcherGrantToken,
 		}
 
@@ -93,9 +73,9 @@ func (l *LaunchCommand) Execute() error {
 			return fmt.Errorf("handshake failed: %w", err)
 		}
 
-		// 7. fetch grant token for runner
+		// 6. fetch grant token for runner
 
-		runnerGrantToken, err := http.FetchGrantToken(envCfg.TaskBrokerServerURI, envCfg.AuthToken)
+		runnerGrantToken, err := http.FetchGrantToken(cfg.TaskBrokerURI, cfg.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}
@@ -107,14 +87,14 @@ func (l *LaunchCommand) Execute() error {
 		// 8. launch runner
 
 		logs.Debug("Task ready for pickup, launching runner...")
-		logs.Debugf("Command: %s", runnerCfg.Command)
-		logs.Debugf("Args: %v", runnerCfg.Args)
+		logs.Debugf("Command: %s", cfg.Runner.Command)
+		logs.Debugf("Args: %v", cfg.Runner.Args)
 		logs.Debugf("Env vars: %v", env.Keys(runnerEnv))
 
 		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
 		var wg sync.WaitGroup
 
-		cmd := exec.CommandContext(ctx, runnerCfg.Command, runnerCfg.Args...)
+		cmd := exec.CommandContext(ctx, cfg.Runner.Command, cfg.Runner.Args...)
 		cmd.Env = runnerEnv
 		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters()
 

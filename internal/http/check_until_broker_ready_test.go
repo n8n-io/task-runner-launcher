@@ -29,18 +29,18 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			requestCount := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requestCount++
 				tt.serverFn(w, r, requestCount)
 			}))
-			defer server.Close()
+			defer srv.Close()
 
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
 
 			done := make(chan error)
 			go func() {
-				done <- CheckUntilBrokerReady(server.URL)
+				done <- CheckUntilBrokerReady(srv.URL)
 			}()
 
 			select {
@@ -83,11 +83,11 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(tt.handler))
+			srv := httptest.NewServer(http.HandlerFunc(tt.handler))
 			if tt.name == "error - closed server" {
-				server.Close()
+				srv.Close()
 			} else {
-				defer server.Close()
+				defer srv.Close()
 			}
 
 			// CheckUntilBrokerReady retries forever, so set up
@@ -99,7 +99,7 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 
 			brokerUnexpectedlyReady := make(chan error)
 			go func() {
-				brokerUnexpectedlyReady <- CheckUntilBrokerReady(server.URL)
+				brokerUnexpectedlyReady <- CheckUntilBrokerReady(srv.URL)
 			}()
 
 			select {
@@ -137,7 +137,7 @@ func TestSendReadinessRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet {
 					t.Errorf("expected GET request, got %s", r.Method)
 				}
@@ -146,9 +146,9 @@ func TestSendReadinessRequest(t *testing.T) {
 				}
 				w.WriteHeader(tt.serverResponse)
 			}))
-			defer server.Close()
+			defer srv.Close()
 
-			resp, err := sendHealthRequest(server.URL)
+			resp, err := sendHealthRequest(srv.URL)
 
 			if err == nil {
 				defer resp.Body.Close()

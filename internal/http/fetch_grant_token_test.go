@@ -94,10 +94,10 @@ func TestFetchGrantToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(tt.serverFn))
-			defer server.Close()
+			srv := httptest.NewServer(http.HandlerFunc(tt.serverFn))
+			defer srv.Close()
 
-			token, err := FetchGrantToken(server.URL, tt.authToken)
+			token, err := FetchGrantToken(srv.URL, tt.authToken)
 			hasErr := err != nil
 
 			if hasErr != tt.wantErr {
@@ -152,5 +152,23 @@ func TestFetchGrantTokenRetry(t *testing.T) {
 	}
 	if tryCount != 2 {
 		t.Errorf("Expected 2 attempts, got %d", tryCount)
+	}
+}
+
+func TestFetchGrantTokenConnectionFailure(t *testing.T) {
+	invalidServerURL := "http://localhost:1"
+
+	token, err := FetchGrantToken(invalidServerURL, "test-token")
+
+	if err == nil {
+		t.Error("Expected error for connection failure, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("Expected error containing 'connection refused', got %v", err)
+	}
+
+	if token != "" {
+		t.Errorf("Expected empty token for failed connection, got %q", token)
 	}
 }

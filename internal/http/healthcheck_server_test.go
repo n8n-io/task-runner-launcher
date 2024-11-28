@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 )
 
@@ -94,7 +93,7 @@ func (w *failingWriter) WriteHeader(statusCode int) {
 }
 
 func TestNewHealthCheckServer(t *testing.T) {
-	server := NewHealthCheckServer()
+	server := NewHealthCheckServer("5680")
 
 	if server == nil {
 		t.Fatal("NewHealthCheckServer() returned nil")
@@ -111,56 +110,5 @@ func TestNewHealthCheckServer(t *testing.T) {
 
 	if server.WriteTimeout != writeTimeout {
 		t.Errorf("NewHealthCheckServer() writeTimeout = %v, want %v", server.WriteTimeout, writeTimeout)
-	}
-}
-
-func TestGetPort(t *testing.T) {
-	tests := []struct {
-		name         string
-		envPort      string
-		expectedPort int
-	}{
-		{
-			name:         "returns default port when env var is not set",
-			envPort:      "",
-			expectedPort: defaultPort,
-		},
-		{
-			name:         "returns custom port when valid env var is set",
-			envPort:      "8080",
-			expectedPort: 8080,
-		},
-		{
-			name:         "returns default port when env var is negative",
-			envPort:      "-1",
-			expectedPort: defaultPort,
-		},
-		{
-			name:         "returns default port when env var is zero",
-			envPort:      "0",
-			expectedPort: defaultPort,
-		},
-		{
-			name:         "returns default port when env var is too large",
-			envPort:      "65536",
-			expectedPort: defaultPort,
-		},
-		{
-			name:         "returns default port when env var is not a number",
-			envPort:      "invalid",
-			expectedPort: defaultPort,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv(portEnvVar, tt.envPort)
-
-			if got := GetPort(); got != tt.expectedPort {
-				t.Errorf("GetPort() = %v, want %v", got, tt.expectedPort)
-			}
-
-			os.Unsetenv(portEnvVar)
-		})
 	}
 }

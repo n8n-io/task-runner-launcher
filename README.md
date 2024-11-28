@@ -75,6 +75,17 @@ To control the launcher's log level, set the `N8N_LAUNCHER_LOG_LEVEL` env var to
 
 If idle for 15 seconds, the runner will exit. To override this duration, set the `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or `0` to disable it. After runner exit on idle timeout, the launcher will re-launch the runner on demand, i.e. when the next task comes in.
 
+### Sentry configuration
+
+Sentry can be configured using the following env vars:
+
+- `SENTRY_DSN`
+- `DEPLOYMENT_NAME` : Mapped to `ServerName`
+- `ENVIRONMENT` : Mapped to `Environment`
+- `N8N_VERSION` : Mapped to `Release`
+
+More details [here](https://docs.sentry.io/platforms/go/configuration/options/).
+
 ## Usage
 
 Once setup is complete, start the launcher:

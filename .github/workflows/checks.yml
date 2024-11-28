@@ -16,7 +16,11 @@ jobs:
           version: latest
 
       - name: Format check
-        run: go fmt ./...
+        run: |
+          if [ -n "$(go fmt ./...)" ]; then
+            echo "Found unformatted Go files. Please run 'go fmt ./...'"
+            exit 1
+          fi
 
       - name: Static analysis
         run: go vet ./...

@@ -1,76 +1,94 @@
 package errorreporting
 
 import (
-	"os"
+	"errors"
+	"task-runner-launcher/internal/config"
 	"testing"
+	"time"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestConfigFromEnv(t *testing.T) {
+func TestInit(t *testing.T) {
 	tests := []struct {
 		name           string
-		envVars        map[string]string
-		expectedConfig Config
+		config         *config.SentryConfig
+		expectInit     bool
+		expectPanic    bool
+		mockSentryInit func(options sentry.ClientOptions) error
 	}{
 		{
-			name: "Sentry disabled when DSN is empty",
-			envVars: map[string]string{
-				"SENTRY_DSN": "",
+			name: "should not initialize when disabled",
+			config: &config.SentryConfig{
+				IsEnabled: false,
 			},
-			expectedConfig: Config{IsEnabled: false},
+			expectInit: false,
 		},
 		{
-			name: "Sentry disabled when DSN is invalid",
-			envVars: map[string]string{
-				"SENTRY_DSN": "http://\\invalid",
-			},
-			expectedConfig: Config{IsEnabled: false},
-		},
-		{
-			name: "Sentry enabled with valid config",
-			envVars: map[string]string{
-				"SENTRY_DSN":      "http://example.com",
-				"DEPLOYMENT_NAME": "test-deployment",
-				"ENVIRONMENT":     "test-env",
-				"N8N_VERSION":     "1.0.0",
-			},
-			expectedConfig: Config{
+			name: "should initialize with valid config",
+			config: &config.SentryConfig{
 				IsEnabled:      true,
-				Dsn:            "http://example.com",
+				Dsn:            "https://test@sentry.io/123",
 				DeploymentName: "test-deployment",
-				Environment:    "test-env",
 				Release:        "1.0.0",
+				Environment:    "test-environment",
+			},
+			expectInit: true,
+			mockSentryInit: func(options sentry.ClientOptions) error {
+				assert.Equal(t, "https://test@sentry.io/123", options.Dsn)
+				assert.Equal(t, "test-deployment", options.ServerName)
+				assert.Equal(t, "1.0.0", options.Release)
+				assert.Equal(t, "test-environment", options.Environment)
+				assert.False(t, options.Debug)
+				assert.False(t, options.EnableTracing)
+				return nil
 			},
 		},
 		{
-			name: "Sentry enabled with missing config",
-			envVars: map[string]string{
-				"SENTRY_DSN": "http://example.com",
+			name: "should handle initialization error",
+			config: &config.SentryConfig{
+				IsEnabled: true,
+				Dsn:       "invalid-dsn",
 			},
-			expectedConfig: Config{
-				IsEnabled:      true,
-				Dsn:            "http://example.com",
-				DeploymentName: "task-runner-launcher",
-				Environment:    "unknown",
-				Release:        "unknown",
+			expectInit:  true,
+			expectPanic: true,
+			mockSentryInit: func(_ sentry.ClientOptions) error {
+				return errors.New("oh no")
 			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			for key, value := range test.envVars {
-				os.Setenv(key, value)
-			}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectPanic {
+				originalOsExit := osExit
+				defer func() { osExit = originalOsExit }()
+				exitCalled := false
+				osExit = func(code int) {
+					exitCalled = true
+					assert.Equal(t, 1, code)
+				}
 
-			config := ConfigFromEnv()
-
-			if config != test.expectedConfig {
-				t.Errorf("got %+v, want %+v", config, test.expectedConfig)
-			}
-
-			for key := range test.envVars {
-				os.Unsetenv(key)
+				Init(tt.config)
+				assert.True(t, exitCalled, "expected os.Exit to be called")
+			} else {
+				Init(tt.config)
 			}
 		})
 	}
+}
+
+func TestClose(t *testing.T) {
+	flushCalled := false
+	expectedDuration := 2 * time.Second
+
+	sentryFlush = func(timeout time.Duration) bool {
+		flushCalled = true
+		assert.Equal(t, expectedDuration, timeout)
+		return true
+	}
+
+	Close()
+	assert.True(t, flushCalled, "expected sentry.Flush to be called")
 }

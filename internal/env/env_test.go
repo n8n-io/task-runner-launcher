@@ -3,6 +3,8 @@ package env
 import (
 	"os"
 	"reflect"
+	"sort"
+	"task-runner-launcher/internal/config"
 	"testing"
 )
 
@@ -54,7 +56,7 @@ func TestAllowedOnly(t *testing.T) {
 				os.Setenv(k, v)
 			}
 
-			got := AllowedOnly(tt.allowed)
+			got := allowedOnly(tt.allowed)
 
 			if tt.expected == nil && len(got) == 0 {
 				return
@@ -143,114 +145,103 @@ func TestClear(t *testing.T) {
 	}
 }
 
-func TestFromEnv(t *testing.T) {
+func TestPrepareRunnerEnv(t *testing.T) {
 	tests := []struct {
-		name        string
-		envVars     map[string]string
-		expectError bool
-		expected    *EnvConfig
+		name      string
+		config    *config.Config
+		envSetup  map[string]string
+		expected  []string
+		setupFunc func()
+		cleanFunc func()
 	}{
 		{
-			name: "valid custom configuration",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "http://localhost:9001",
-				EnvVarIdleTimeout:         "30",
+			name: "includes default and allowed env vars",
+			config: &config.Config{
+				AutoShutdownTimeout: "15",
+				Runner: &config.RunnerConfig{
+					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+				},
 			},
-			expected: &EnvConfig{
-				AuthToken:           "token123",
-				TaskBrokerServerURI: "http://localhost:9001",
+			envSetup: map[string]string{
+				"PATH":        "/usr/bin",
+				"LANG":        "en_US.UTF-8",
+				"TZ":          "UTC",
+				"TERM":        "xterm",
+				"CUSTOM_VAR1": "value1",
+				"CUSTOM_VAR2": "value2",
+				"RESTRICTED":  "should-not-appear",
 			},
-		},
-		{
-			name: "missing auth token",
-			envVars: map[string]string{
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-			},
-			expectError: true,
-		},
-		{
-			name: "invalid task broker server URI",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "http://\\invalid:5679",
-			},
-			expectError: true,
-		},
-		{
-			name: "missing task broker server URI",
-			envVars: map[string]string{
-				EnvVarAuthToken: "token123",
-			},
-			expected: &EnvConfig{
-				AuthToken:           "token123",
-				TaskBrokerServerURI: DefaultTaskBrokerServerURI,
+			expected: []string{
+				"CUSTOM_VAR1=value1",
+				"CUSTOM_VAR2=value2",
+				"LANG=en_US.UTF-8",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
+				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"PATH=/usr/bin",
+				"TERM=xterm",
+				"TZ=UTC",
 			},
 		},
 		{
-			name: "missing scheme in 127.0.0.1 URI",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "127.0.0.1:5679",
+			name: "handles empty allowed env list",
+			config: &config.Config{
+				AutoShutdownTimeout: "15",
+				Runner: &config.RunnerConfig{
+					AllowedEnv: []string{},
+				},
 			},
-			expectError: true,
+			envSetup: map[string]string{
+				"PATH":       "/usr/bin",
+				"LANG":       "en_US.UTF-8",
+				"RESTRICTED": "should-not-appear",
+			},
+			expected: []string{
+				"LANG=en_US.UTF-8",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
+				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"PATH=/usr/bin",
+			},
 		},
 		{
-			name: "missing scheme in localhost URI",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "localhost:5679",
+			name: "handles custom auto-shutdown timeout",
+			config: &config.Config{
+				AutoShutdownTimeout: "30",
+				Runner: &config.RunnerConfig{
+					AllowedEnv: []string{},
+				},
 			},
-			expectError: true,
-		},
-		{
-			name: "invalid idle timeout",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-				EnvVarIdleTimeout:         "invalid",
+			envSetup: map[string]string{
+				"PATH":                              "/usr/bin",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "30",
 			},
-			expectError: true,
-		},
-		{
-			name: "negative idle timeout",
-			envVars: map[string]string{
-				EnvVarAuthToken:           "token123",
-				EnvVarTaskBrokerServerURI: "http://localhost:5679",
-				EnvVarIdleTimeout:         "-1",
+			expected: []string{
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
+				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"PATH=/usr/bin",
 			},
-			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Clearenv()
-			for k, v := range tt.envVars {
+			for k, v := range tt.envSetup {
 				os.Setenv(k, v)
 			}
 
-			envCfg, err := FromEnv()
-
-			if tt.expectError {
-				if err == nil {
-					t.Error("FromEnv() expected error, got nil")
-				}
-				return
+			if tt.setupFunc != nil {
+				tt.setupFunc()
 			}
 
-			if err != nil {
-				t.Errorf("FromEnv() unexpected error: %v", err)
-				return
+			got := PrepareRunnerEnv(tt.config)
+			sort.Strings(got)
+
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("PrepareRunnerEnv() =\ngot:  %v\nwant: %v", got, tt.expected)
 			}
 
-			if envCfg == nil {
-				t.Error("FromEnv() returned nil config")
-				return
-			}
-
-			if !reflect.DeepEqual(envCfg, tt.expected) {
-				t.Errorf("FromEnv() = %+v, want %+v", envCfg, tt.expected)
+			if tt.cleanFunc != nil {
+				tt.cleanFunc()
 			}
 		})
 	}

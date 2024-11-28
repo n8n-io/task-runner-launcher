@@ -3,144 +3,157 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/sethvargo/go-envconfig"
 )
 
-func TestGetRunnerConfig(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "task-runner-launcher-config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+func TestLoadConfig(t *testing.T) {
+	testConfigPath := filepath.Join(t.TempDir(), "testconfig.json")
 
-	original := configPath
-	configPath = filepath.Join(tmpDir, "n8n-task-runners.json")
-	defer func() { configPath = original }()
+	validConfigContent := `{
+		"task-runners": [{
+			"runner-type": "javascript",
+			"workdir": "/test/dir",
+			"command": "node",
+			"args": ["/test/start.js"],
+			"allowed-env": ["PATH", "NODE_ENV"]
+		}]
+	}`
 
 	tests := []struct {
-		name           string
-		configContent  string
-		runnerType     string
-		expectError    bool
-		expectedConfig *TaskRunnerConfig
+		name          string
+		configContent string
+		envVars       map[string]string
+		runnerType    string
+		expectedError bool
+		errorMsg      string
 	}{
 		{
-			name: "valid single runner config",
-			configContent: `{
-				"task-runners": [
-					{
-						"runner-type": "javascript",
-						"workdir": "/usr/local/bin",
-						"command": "/usr/local/bin/node",
-						"args": ["/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"],
-						"allowed-env": ["PATH", "NODE_OPTIONS"]
-					}
-				]
-			}`,
-			runnerType: "javascript",
-			expectedConfig: &TaskRunnerConfig{
-				RunnerType: "javascript",
-				WorkDir:    "/usr/local/bin",
-				Command:    "/usr/local/bin/node",
-				Args:       []string{"/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"},
-				AllowedEnv: []string{"PATH", "NODE_OPTIONS"},
+			name:          "valid configuration",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
+				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+				"SENTRY_DSN":             "https://test@sentry.io/123",
 			},
+			runnerType:    "javascript",
+			expectedError: false,
 		},
 		{
-			name: "valid multiple runner config",
-			configContent: `{
-				"task-runners": [
-					{
-						"runner-type": "javascript",
-						"workdir": "/usr/local/bin",
-						"command": "/usr/local/bin/node",
-						"args": ["/start.js"],
-						"allowed-env": ["PATH"]
-					},
-					{
-						"runner-type": "python",
-						"workdir": "/usr/local/bin",
-						"command": "/usr/local/bin/python",
-						"args": ["/start.py"],
-						"allowed-env": ["PYTHONPATH"]
-					}
-				]
-			}`,
-			runnerType: "python",
-			expectedConfig: &TaskRunnerConfig{
-				RunnerType: "python",
-				WorkDir:    "/usr/local/bin",
-				Command:    "/usr/local/bin/python",
-				Args:       []string{"/start.py"},
-				AllowedEnv: []string{"PYTHONPATH"},
+			name:          "valid configuration",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
+				"N8N_TASK_BROKER_URI":    "http://127.0.0.1:5679",
+				"SENTRY_DSN":             "https://test@sentry.io/123",
 			},
+			runnerType:    "javascript",
+			expectedError: false,
 		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+
+			configPath = testConfigPath
+
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
+			if err != nil {
+				t.Fatalf("Failed to write test config file: %v", err)
+			}
+
+			lookuper := envconfig.MapLookuper(tt.envVars)
+			_, err = LoadConfig(tt.runnerType, lookuper)
+
+			if tt.expectedError && err == nil {
+				t.Error("Expected error but got nil")
+				return
+			}
+
+			if !tt.expectedError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if tt.expectedError && !strings.Contains(err.Error(), tt.errorMsg) {
+				t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+			}
+		})
+	}
+}
+
+func TestConfigFileErrors(t *testing.T) {
+	testConfigPath := filepath.Join(t.TempDir(), "testconfig.json")
+
+	tests := []struct {
+		name          string
+		configContent string
+		expectedError string
+		envVars       map[string]string
+	}{
 		{
-			name: "runner type not found",
-			configContent: `{
-				"task-runners": [
-					{
-						"runner-type": "javascript",
-						"workdir": "/usr/local/bin",
-						"command": "/usr/local/bin/node",
-						"args": ["/start.js"],
-						"allowed-env": ["PATH"]
-					}
-				]
-			}`,
-			runnerType:  "python",
-			expectError: true,
+			name:          "invalid JSON in config file",
+			configContent: "invalid json",
+			expectedError: "failed to parse config file",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
+				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+			},
 		},
 		{
 			name: "empty task runners array",
 			configContent: `{
 				"task-runners": []
 			}`,
-			runnerType:  "javascript",
-			expectError: true,
+			expectedError: "found no task runner configs",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
+				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+			},
 		},
 		{
-			name:          "invalid json",
-			configContent: `{"task-runners": [{"runner-type": "javascript"`,
-			runnerType:    "javascript",
-			expectError:   true,
-		},
-		{
-			name:          "missing config file",
-			configContent: "",
-			runnerType:    "javascript",
-			expectError:   true,
+			name: "runner type not found",
+			configContent: `{
+				"task-runners": [{
+					"runner-type": "python",
+					"workdir": "/test/dir",
+					"command": "python",
+					"args": ["/test/start.py"],
+					"allowed-env": ["PATH", "PYTHONPATH"]
+				}]
+			}`,
+			expectedError: "does not contain requested runner type: javascript",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
+				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			configPath = testConfigPath
+
 			if tt.configContent != "" {
 				err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
 				if err != nil {
 					t.Fatalf("Failed to write test config file: %v", err)
 				}
-			} else {
-				os.Remove(configPath)
 			}
 
-			config, err := GetRunnerConfig(tt.runnerType)
+			lookuper := envconfig.MapLookuper(tt.envVars)
+			_, err := LoadConfig("javascript", lookuper)
 
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got nil")
-				}
+			if err == nil {
+				t.Error("Expected error but got nil")
 				return
 			}
 
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
-
-			if !reflect.DeepEqual(config, tt.expectedConfig) {
-				t.Errorf("Config mismatch\nGot: %+v\nWant: %+v", config, tt.expectedConfig)
+			if !strings.Contains(err.Error(), tt.expectedError) {
+				t.Errorf("Expected error containing %q, got %q", tt.expectedError, err.Error())
 			}
 		})
 	}

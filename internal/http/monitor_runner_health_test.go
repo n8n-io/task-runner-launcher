@@ -107,10 +107,8 @@ func TestMonitorRunnerHealthFailure(t *testing.T) {
 	}
 
 	defer func() {
-		if cmd.Process != nil {
-			if err := cmd.Process.Kill(); err != nil {
-				t.Logf("Failed to kill process during cleanup: %v", err)
-			}
+		if cmd.Process != nil && cmd.Process.Kill() != nil {
+			t.Log("Failed to kill process during cleanup")
 		}
 	}()
 

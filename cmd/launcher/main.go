@@ -40,19 +40,18 @@ func main() {
 	errorreporting.Init(cfg.Sentry)
 	defer errorreporting.Close()
 
-	srv := http.NewHealthCheckServer()
+	srv := http.NewHealthCheckServer(cfg.HealthCheckServerPort)
 	go func() {
-		logs.Infof("Starting health check server at port %d", http.GetPort())
-
 		if err := srv.ListenAndServe(); err != nil {
 			errMsg := "Health check server failed to start"
 			if opErr, ok := err.(*net.OpError); ok && opErr.Op == "listen" {
-				errMsg = fmt.Sprintf("%s: Port %d is already in use", errMsg, http.GetPort())
+				errMsg = fmt.Sprintf("%s: Port %s is already in use", errMsg, srv.Addr)
 			} else {
 				errMsg = fmt.Sprintf("%s: %s", errMsg, err)
 			}
 			logs.Error(errMsg)
 		}
+		logs.Infof("Started launcher's health check server at port %d", srv.Addr)
 	}()
 
 	cmd := &commands.LaunchCommand{}

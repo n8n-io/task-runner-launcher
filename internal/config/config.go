@@ -17,6 +17,11 @@ var configPath = "/etc/n8n-task-runners.json"
 
 var cfg Config
 
+const (
+	// EnvVarHealthCheckPort is the env var for the port for the launcher's health check server.
+	EnvVarHealthCheckPort = "N8N_LAUNCHER_HEALTCHECK_PORT"
+)
+
 // Config holds the full configuration for the launcher.
 type Config struct {
 	// LogLevel is the log level for the launcher. Default: `info`.
@@ -32,6 +37,9 @@ type Config struct {
 
 	// TaskBrokerURI is the URI of the task broker server.
 	TaskBrokerURI string `env:"N8N_TASK_BROKER_URI, default=http://127.0.0.1:5679"`
+
+	// HealthCheckServerPort is the port for the launcher's health check server.
+	HealthCheckServerPort string `env:"N8N_LAUNCHER_HEALTCHECK_PORT, default=5680"`
 
 	// Runner is the runner config for the task runner, obtained from:
 	// `/etc/n8n-task-runners.json`.
@@ -90,6 +98,10 @@ func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error)
 		cfgErrs = append(cfgErrs, errs.ErrNonIntegerAutoShutdownTimeout)
 	} else if timeoutInt < 0 {
 		cfgErrs = append(cfgErrs, errs.ErrNegativeAutoShutdownTimeout)
+	}
+
+	if port, err := strconv.Atoi(cfg.HealthCheckServerPort); err != nil || port <= 0 || port >= 65536 {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be a valid port number", EnvVarHealthCheckPort))
 	}
 
 	// runner

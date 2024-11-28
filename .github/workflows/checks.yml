@@ -1,7 +1,7 @@
 on: [push]
 
 jobs:
-  audit:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
@@ -16,7 +16,7 @@ jobs:
           version: latest
 
       - name: Format check
-        run: go fmt ./...
+        run: make fmt-check
 
       - name: Static analysis
         run: go vet ./...

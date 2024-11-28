@@ -20,12 +20,12 @@ func sendGrantTokenRequest(taskBrokerServerURI, authToken string) (string, error
 	payload := map[string]string{"token": authToken}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal grant token request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create grant token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -48,9 +48,9 @@ func sendGrantTokenRequest(taskBrokerServerURI, authToken string) (string, error
 	return tokenResp.Data.Token, nil
 }
 
-// FetchGrantToken exchanges the launcher's auth token for a single-use
-// grant token from the task broker. In case the task broker is
-// temporarily unavailable, this exchange is retried a limited number of times.
+// FetchGrantToken exchanges the launcher's auth token for a single-use grant
+// token from the task broker. In case the task broker is temporarily
+// unavailable, this exchange is retried a limited number of times.
 func FetchGrantToken(taskBrokerServerURI, authToken string) (string, error) {
 	grantTokenFetch := func() (string, error) {
 		token, err := sendGrantTokenRequest(taskBrokerServerURI, authToken)

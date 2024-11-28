@@ -7,9 +7,9 @@ import (
 )
 
 var (
-	defaultMaxRetryTime           = 60 * time.Second
-	defaultMaxRetries             = 100
-	defaultWaitTimeBetweenRetries = 5 * time.Second
+	DefaultMaxRetryTime           = 60 * time.Second
+	DefaultMaxRetries             = 100
+	DefaultWaitTimeBetweenRetries = 5 * time.Second
 )
 
 type retryConfig struct {
@@ -68,15 +68,15 @@ func UnlimitedRetry[T any](operationName string, operationFn func() (T, error)) 
 	return retry(operationName, operationFn, retryConfig{
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
-		WaitTimeBetweenRetries: defaultWaitTimeBetweenRetries,
+		WaitTimeBetweenRetries: DefaultWaitTimeBetweenRetries,
 	})
 }
 
 // LimitedRetry retries an operation until max retry time or until max attempts.
 func LimitedRetry[T any](operationName string, operationFn func() (T, error)) (T, error) {
 	return retry(operationName, operationFn, retryConfig{
-		MaxRetryTime:           defaultMaxRetryTime,
-		MaxAttempts:            defaultMaxRetries,
-		WaitTimeBetweenRetries: defaultWaitTimeBetweenRetries,
+		MaxRetryTime:           DefaultMaxRetryTime,
+		MaxAttempts:            DefaultMaxRetries,
+		WaitTimeBetweenRetries: DefaultWaitTimeBetweenRetries,
 	})
 }

@@ -4,26 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"task-runner-launcher/internal/logs"
 	"time"
 )
 
 const (
-	defaultPort     = 5680
-	portEnvVar      = "N8N_LAUNCHER_HEALTCHECK_PORT"
 	healthCheckPath = "/healthz"
 	readTimeout     = 1 * time.Second
 	writeTimeout    = 1 * time.Second
 )
 
-func NewHealthCheckServer() *http.Server {
+func NewHealthCheckServer(port string) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc(healthCheckPath, handleHealthCheck)
 
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%d", GetPort()),
+		Addr:         fmt.Sprintf(":%s", port),
 		Handler:      mux,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
@@ -47,15 +43,4 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-}
-
-func GetPort() int {
-	if customPortStr := os.Getenv(portEnvVar); customPortStr != "" {
-		if customPort, err := strconv.Atoi(customPortStr); err == nil && customPort > 0 && customPort < 65536 {
-			return customPort
-		}
-		logs.Warnf("%s sets an invalid port, falling back to default port %d", portEnvVar, defaultPort)
-	}
-
-	return defaultPort
 }

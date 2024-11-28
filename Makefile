@@ -1,4 +1,4 @@
-.PHONY: audit build lint lintfix run
+.PHONY: audit build lint lintfix fmt fmt-check run test test-verbose test-coverage
 
 check: lint
 	go fmt ./...
@@ -12,6 +12,15 @@ lint:
 
 lintfix:
 	golangci-lint run --fix
+
+fmt:
+	go fmt ./...
+
+fmt-check:
+	@if [ -n "$$(go fmt ./...)" ]; then \
+		echo "Found unformatted Go files. Please run 'make fmt'"; \
+		exit 1; \
+	fi
 
 run: build
 	./bin/main javascript

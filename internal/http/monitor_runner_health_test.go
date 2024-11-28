@@ -86,7 +86,7 @@ func TestMonitorRunnerHealth(t *testing.T) {
 
 	select {
 	case <-waitCh:
-		// monitoring goroutine was shut down within timeout
+		// success case - monitoring stopped properly
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Test timed out waiting for monitor to stop")
 	}
@@ -142,7 +142,7 @@ func TestMonitorRunnerHealthFailure(t *testing.T) {
 
 	select {
 	case <-waitCh:
-		// monitoring goroutine was shut down within timeout
+		// success case - monitoring stopped properly
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Test timed out waiting for monitor to stop")
 	}

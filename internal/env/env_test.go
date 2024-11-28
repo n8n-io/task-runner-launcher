@@ -233,7 +233,6 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				tt.setupFunc()
 			}
 
-			// Run test
 			got := PrepareRunnerEnv(tt.config)
 			sort.Strings(got)
 
@@ -241,7 +240,6 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				t.Errorf("PrepareRunnerEnv() =\ngot:  %v\nwant: %v", got, tt.expected)
 			}
 
-			// Cleanup
 			if tt.cleanFunc != nil {
 				tt.cleanFunc()
 			}

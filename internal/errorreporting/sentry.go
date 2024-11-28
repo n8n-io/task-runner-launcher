@@ -15,7 +15,7 @@ var (
 	osExit      = os.Exit
 )
 
-// Init initializes the Sentry client using launcher configuration.
+// Init initializes the Sentry client using given configuration.
 // If SENTRY_DSN env var is not set, Sentry will be disabled.
 func Init(sentryCfg *config.SentryConfig) {
 	if !sentryCfg.IsEnabled {

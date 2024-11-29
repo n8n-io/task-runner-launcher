@@ -103,11 +103,11 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.MonitorRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg)
+		go http.ManageRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg)
 
 		err = cmd.Wait()
 		if err != nil && err.Error() == "signal: killed" {
-			logs.Warn("Unhealthy runner process was terminated")
+			logs.Warn("Unresponsive runner process was terminated")
 		} else if err != nil {
 			logs.Errorf("Runner process exited with error: %v", err)
 		} else {

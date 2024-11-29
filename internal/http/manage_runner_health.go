@@ -28,6 +28,23 @@ var (
 	initialDelay = 3 * time.Second
 )
 
+// HealthStatus represents the possible states of runner health monitoring
+type HealthStatus int
+
+const (
+	// StatusHealthy indicates the runner is responding to health checks
+	StatusHealthy HealthStatus = iota
+	// StatusUnhealthy indicates the runner has failed too many health checks
+	StatusUnhealthy
+	// StatusMonitoringCancelled indicates monitoring was cancelled via context
+	StatusMonitoringCancelled
+)
+
+// healthCheckResult contains the result of health monitoring
+type healthCheckResult struct {
+	Status HealthStatus
+}
+
 // sendRunnerHealthCheckRequest sends a request to the runner's health check endpoint.
 // Returns `nil` if the health check succeeds, or an error if it fails.
 func sendRunnerHealthCheckRequest(runnerServerURI string) error {
@@ -50,12 +67,18 @@ func sendRunnerHealthCheckRequest(runnerServerURI string) error {
 	return nil
 }
 
-// MonitorRunnerHealth regularly checks the runner's health status. If the
-// health check fails more times than allowed, we terminate the runner process.
-func MonitorRunnerHealth(ctx context.Context, cmd *exec.Cmd, runnerServerURI string, wg *sync.WaitGroup) {
+func monitorRunnerHealth(
+	ctx context.Context,
+	runnerServerURI string,
+	wg *sync.WaitGroup,
+) chan healthCheckResult {
+	logs.Debug("Started monitoring runner health")
+	resultChan := make(chan healthCheckResult, 1)
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(resultChan)
 
 		time.Sleep(initialDelay)
 
@@ -67,24 +90,47 @@ func MonitorRunnerHealth(ctx context.Context, cmd *exec.Cmd, runnerServerURI str
 			select {
 			case <-ctx.Done():
 				logs.Debug("Stopped monitoring runner health")
+				resultChan <- healthCheckResult{Status: StatusMonitoringCancelled}
 				return
+
 			case <-ticker.C:
 				if err := sendRunnerHealthCheckRequest(runnerServerURI); err != nil {
 					failureCount++
 					logs.Warnf("Found runner unresponsive (%d/%d)", failureCount, healthCheckMaxFailures)
 					if failureCount >= healthCheckMaxFailures {
-						logs.Warn("Reached max failures on runner health check, terminating runner...")
-						if err := cmd.Process.Kill(); err != nil {
-							panic(fmt.Errorf("failed to terminate runner process: %v", err))
-						}
-						logs.Debug("Stopped monitoring runner health")
+						logs.Warn("Found runner unresponsive too many times, terminating runner...")
+						resultChan <- healthCheckResult{Status: StatusUnhealthy}
 						return
 					}
 				} else {
-					failureCount = 0
 					logs.Debug("Found runner healthy")
+					failureCount = 0
 				}
 			}
+		}
+	}()
+
+	return resultChan
+}
+
+// ManageRunnerHealth monitors runner health and terminates it if unhealthy.
+func ManageRunnerHealth(
+	ctx context.Context,
+	cmd *exec.Cmd,
+	runnerServerURI string,
+	wg *sync.WaitGroup,
+) {
+	resultChan := monitorRunnerHealth(ctx, runnerServerURI, wg)
+
+	go func() {
+		result := <-resultChan
+		switch result.Status {
+		case StatusUnhealthy:
+			if err := cmd.Process.Kill(); err != nil {
+				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
+			}
+		case StatusMonitoringCancelled:
+			// On cancellation via context, CommandContext will terminate the process, so no action.
 		}
 	}()
 }

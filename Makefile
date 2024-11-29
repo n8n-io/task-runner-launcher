@@ -1,4 +1,4 @@
-.PHONY: audit build lint lintfix fmt fmt-check run test test-verbose test-coverage
+.PHONY: audit build lint lintfix fmt fmt-check run test test-uncached test-verbose test-coverage
 
 check: lint
 	go fmt ./...
@@ -27,6 +27,9 @@ run: build
 
 test:
 	go test ./...
+
+test-uncached:
+	go test -count=1 ./...
 
 test-verbose:
 	go test -v ./...

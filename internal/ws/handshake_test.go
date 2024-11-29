@@ -266,7 +266,7 @@ func TestHandshakeTimeout(t *testing.T) {
 			t.Fatalf("Failed to write `broker:runnerregistered`: %v", err)
 		}
 
-		time.Sleep(2 * time.Second) // instead of sending `broker:taskofferaccept`, trigger a timeout
+		time.Sleep(100 * time.Millisecond) // instead of sending `broker:taskofferaccept`, trigger a timeout
 	}))
 	defer srv.Close()
 
@@ -284,7 +284,7 @@ func TestHandshakeTimeout(t *testing.T) {
 		if err == nil {
 			t.Error("Expected timeout error, got nil")
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(200 * time.Millisecond):
 		t.Error("Test timed out")
 	}
 }

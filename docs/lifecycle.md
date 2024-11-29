@@ -2,7 +2,7 @@
 
 ## Summary
 
-The purpose of the launcher is to minimize resource use by launching a runner on demand. To do so, the launcher impersonates a task runner until a task is ready for pickup, and then it launches runner to run the task, and after the runner has automatically shut down, the launcher will re-launch a runner to pick up the next task.
+The purpose of the launcher is to minimize resource use by launching a runner on demand. To do so, the launcher impersonates a task runner until a task is ready for pickup, and then it launches a runner to run the task, and after the runner has automatically shut down, the launcher will re-launch a runner to pick up the next task.
 
 ## Step by step
 

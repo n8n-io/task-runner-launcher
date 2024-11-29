@@ -34,7 +34,7 @@ pnpm start
 6. Start launcher:
 
 ```sh
-export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. same string as in step 4
+export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. same string as in step 5
 make run
 ```
 

@@ -43,7 +43,7 @@ Task runner config fields:
 
 - It is required to specify an auth token by setting `N8N_RUNNERS_AUTH_TOKEN` to a secret. The launcher will use this secret to authenticate with the n8n main instance. You will also pass this `N8N_RUNNERS_AUTH_TOKEN` to the n8n main instance as well.
 
-- Optionally, specify the launcher's log level by setting `N8N_LAUNCHER_LOG_LEVEL` to `debug`, `info`, `warn` or `error`. Default is `info`.
+- Optionally, specify the launcher's log level by setting `N8N_LAUNCHER_LOG_LEVEL` to `debug`, `info`, `warn` or `error`. Default is `info`. You can also use `NO_COLOR=1` to disable color output.
 
 - Optionally, specify the launcher's auto-shutdown timeout by setting `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or set it to `0` to disable. Default is `15`. The runner will exit after this timeout if it is idle for the specified duration, and will be re-launched on demand when the next task comes in.
 

@@ -111,7 +111,7 @@ func TestHandshake(t *testing.T) {
 				TaskBrokerServerURI: "http://localhost",
 				GrantToken:          "test-token",
 			},
-			handlerFunc: func(t *testing.T, conn *websocket.Conn) {
+			handlerFunc: func(_ *testing.T, conn *websocket.Conn) {
 				conn.Close()
 			},
 			expectedError: errs.ErrServerDown.Error(),

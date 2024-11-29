@@ -98,7 +98,6 @@ func monitorRunnerHealth(
 					failureCount++
 					logs.Warnf("Found runner unresponsive (%d/%d)", failureCount, healthCheckMaxFailures)
 					if failureCount >= healthCheckMaxFailures {
-						logs.Warn("Found runner unresponsive too many times, terminating runner...")
 						resultChan <- healthCheckResult{Status: StatusUnhealthy}
 						return
 					}
@@ -126,6 +125,7 @@ func ManageRunnerHealth(
 		result := <-resultChan
 		switch result.Status {
 		case StatusUnhealthy:
+			logs.Warn("Found runner unresponsive too many times, terminating runner...")
 			if err := cmd.Process.Kill(); err != nil {
 				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 			}

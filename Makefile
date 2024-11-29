@@ -6,6 +6,7 @@ check: lint
 
 build:
 	go build -o bin cmd/launcher/main.go
+	@echo "Binary built at: $(shell pwd)/bin/main"
 
 lint:
 	golangci-lint run

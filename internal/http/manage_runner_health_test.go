@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -55,11 +58,10 @@ func TestSendRunnerHealthCheckRequest(t *testing.T) {
 
 			err := sendRunnerHealthCheckRequest(srv.URL)
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got nil")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
+			if tt.expectError {
+				assert.Error(t, err, "expected error but got nil")
+			} else {
+				assert.NoError(t, err, "unexpected error")
 			}
 		})
 	}
@@ -118,9 +120,7 @@ func TestMonitorRunnerHealth(t *testing.T) {
 			resultChan := monitorRunnerHealth(ctx, srv.URL, &wg)
 
 			result := <-resultChan
-			if result.Status != tt.expectedStatus {
-				t.Errorf("want status %v, got %v", tt.expectedStatus, result.Status)
-			}
+			assert.Equal(t, tt.expectedStatus, result.Status, "unexpected health status")
 
 			wg.Wait()
 		})
@@ -155,9 +155,7 @@ func TestManageRunnerHealth(t *testing.T) {
 			defer srv.Close()
 
 			cmd := exec.Command("sleep", "60")
-			if err := cmd.Start(); err != nil {
-				t.Fatalf("Failed to start long-running dummy process: %v", err)
-			}
+			require.NoError(t, cmd.Start(), "Failed to start long-running dummy process")
 
 			done := make(chan error) // to help monitor process state
 			go func() {
@@ -179,18 +177,14 @@ func TestManageRunnerHealth(t *testing.T) {
 			// check if monitored process was killed or kept as expected
 			select {
 			case <-done:
-				if !tt.expectKill {
-					t.Error("Process was killed but should have been left running")
-				}
+				assert.True(t, tt.expectKill, "Process was killed but should have been left running")
+
 			case <-time.After(100 * time.Millisecond):
 				if tt.expectKill {
 					err := cmd.Process.Signal(syscall.Signal(0))
+					assert.Error(t, err, "Expected process to be killed but it was still running")
 					if err == nil {
-						t.Error("Expected process to be killed but it was still running")
-						err := cmd.Process.Kill() // to clean up
-						if err != nil {
-							t.Errorf("Failed to kill process: %v", err)
-						}
+						assert.NoError(t, cmd.Process.Kill(), "Failed to kill process during cleanup")
 					}
 				}
 			}
@@ -215,9 +209,7 @@ func TestContextCancellation(t *testing.T) {
 	cancel()
 
 	result := <-resultChan
-	if result.Status != StatusMonitoringCancelled {
-		t.Errorf("want StatusMonitoringCancelled, got %v", result.Status)
-	}
+	assert.Equal(t, StatusMonitoringCancelled, result.Status, "unexpected status after context cancellation")
 
 	wg.Wait()
 }

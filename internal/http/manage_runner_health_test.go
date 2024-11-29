@@ -45,7 +45,7 @@ func TestSendRunnerHealthCheckRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if tt.serverDelay > 0 {
 					time.Sleep(tt.serverDelay)
 				}
@@ -74,7 +74,7 @@ func TestMonitorRunnerHealth(t *testing.T) {
 	}{
 		{
 			name: "healthy runner",
-			serverFn: func(w http.ResponseWriter, r *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
 			expectedStatus: StatusMonitoringCancelled,
@@ -82,7 +82,7 @@ func TestMonitorRunnerHealth(t *testing.T) {
 		},
 		{
 			name: "unhealthy runner",
-			serverFn: func(w http.ResponseWriter, r *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			},
 			expectedStatus: StatusUnhealthy,
@@ -92,7 +92,7 @@ func TestMonitorRunnerHealth(t *testing.T) {
 			name: "alternating health status",
 			serverFn: func() http.HandlerFunc {
 				isHealthy := true
-				return func(w http.ResponseWriter, r *http.Request) {
+				return func(w http.ResponseWriter, _ *http.Request) {
 					if isHealthy {
 						w.WriteHeader(http.StatusOK)
 					} else {
@@ -135,14 +135,14 @@ func TestManageRunnerHealth(t *testing.T) {
 	}{
 		{
 			name: "healthy runner not killed",
-			serverFn: func(w http.ResponseWriter, r *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
 			expectKill: false,
 		},
 		{
 			name: "unhealthy runner killed",
-			serverFn: func(w http.ResponseWriter, r *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			},
 			expectKill: true,
@@ -187,7 +187,10 @@ func TestManageRunnerHealth(t *testing.T) {
 					err := cmd.Process.Signal(syscall.Signal(0))
 					if err == nil {
 						t.Error("Expected process to be killed but it was still running")
-						cmd.Process.Kill() // to clean up
+						err := cmd.Process.Kill() // to clean up
+						if err != nil {
+							t.Errorf("Failed to kill process: %v", err)
+						}
 					}
 				}
 			}
@@ -198,7 +201,7 @@ func TestManageRunnerHealth(t *testing.T) {
 }
 
 func TestContextCancellation(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()

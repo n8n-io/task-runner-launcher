@@ -4,7 +4,7 @@ To set up a development environment, follow these steps:
 
 1. Install Go >=1.23, [`golangci-lint`](https://golangci-lint.run/welcome/install/) and `make`.
 
-2. Clone this repostiroy and create a [config file](setup.md).
+2. Clone this repository and create a [config file](setup.md).
 
 ```sh
 git clone https://github.com/n8n-io/task-runner-launcher

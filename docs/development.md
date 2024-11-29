@@ -26,7 +26,6 @@ make build
 ```sh
 export N8N_RUNNERS_ENABLED=true
 export N8N_RUNNERS_MODE=external
-export N8N_RUNNERS_LAUNCHER_PATH=...  # i.e. path/to/launcher/binary
 export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. random string
 pnpm start
 ```

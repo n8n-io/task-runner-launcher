@@ -7,8 +7,8 @@ To set up a development environment, follow these steps:
 2. Clone this repostiroy and create a [config file](#config).
 
 ```sh
-git clone https://github.com/n8n-io/PENDING-NAME
-cd PENDING_NAME
+git clone https://github.com/n8n-io/task-runner-launcher
+cd task-runner-launcher
 touch config.json && echo '<json-config-content>' > config.json
 sudo mv config.json /etc/n8n-task-runners.json
 ```

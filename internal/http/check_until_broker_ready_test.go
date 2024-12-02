@@ -88,6 +88,10 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 				defer srv.Close()
 			}
 
+			// CheckUntilBrokerReady retries forever, so set up
+			// - context timeout to show retry loop keeps running without returning
+			// - channel to catch any unexpected early returns
+			// - goroutine to prevent this infinite retries from blocking tests
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 

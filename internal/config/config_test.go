@@ -3,10 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/sethvargo/go-envconfig"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -57,29 +58,21 @@ func TestLoadConfig(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-
 			configPath = testConfigPath
 
 			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
-			if err != nil {
-				t.Fatalf("Failed to write test config file: %v", err)
-			}
+			require.NoError(t, err, "Failed to write test config file")
 
 			lookuper := envconfig.MapLookuper(tt.envVars)
-			_, err = LoadConfig(tt.runnerType, lookuper)
+			cfg, err := LoadConfig(tt.runnerType, lookuper)
 
-			if tt.expectedError && err == nil {
-				t.Error("Expected error but got nil")
-				return
-			}
-
-			if !tt.expectedError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
-
-			if tt.expectedError && !strings.Contains(err.Error(), tt.errorMsg) {
-				t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, cfg)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, cfg)
 			}
 		})
 	}
@@ -139,22 +132,15 @@ func TestConfigFileErrors(t *testing.T) {
 
 			if tt.configContent != "" {
 				err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
-				if err != nil {
-					t.Fatalf("Failed to write test config file: %v", err)
-				}
+				require.NoError(t, err, "Failed to write test config file")
 			}
 
 			lookuper := envconfig.MapLookuper(tt.envVars)
-			_, err := LoadConfig("javascript", lookuper)
+			cfg, err := LoadConfig("javascript", lookuper)
 
-			if err == nil {
-				t.Error("Expected error but got nil")
-				return
-			}
-
-			if !strings.Contains(err.Error(), tt.expectedError) {
-				t.Errorf("Expected error containing %q, got %q", tt.expectedError, err.Error())
-			}
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedError)
+			assert.Nil(t, cfg)
 		})
 	}
 }

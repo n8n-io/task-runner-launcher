@@ -3,8 +3,9 @@ package logs
 import (
 	"bytes"
 	"io"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRunnerWriter(t *testing.T) {
@@ -75,27 +76,17 @@ func TestRunnerWriter(t *testing.T) {
 			writer := NewRunnerWriter(&buf, tt.prefix, tt.level, tt.color)
 
 			n, err := writer.Write([]byte(tt.input))
-			if err != nil {
-				t.Errorf("RunnerWriter.Write() unexpected error = %v", err)
-				return
-			}
-
-			if n != len(tt.input) {
-				t.Errorf("RunnerWriter.Write() returned length = %v, want %v", n, len(tt.input))
-			}
+			assert.NoError(t, err, "RunnerWriter.Write() should not return an error")
+			assert.Equal(t, len(tt.input), n, "RunnerWriter.Write() should return correct number of bytes written")
 
 			output := buf.String()
 
 			for _, part := range tt.expectedParts {
-				if !strings.Contains(output, part) {
-					t.Errorf("Output missing expected part %q in full output: %q", part, output)
-				}
+				assert.Contains(t, output, part, "Output should contain expected part")
 			}
 
 			for _, part := range tt.skipParts {
-				if strings.Contains(output, part) {
-					t.Errorf("Output should not contain part %q in full output: %q", part, output)
-				}
+				assert.NotContains(t, output, part, "Output should not contain skipped part")
 			}
 		})
 	}
@@ -104,17 +95,9 @@ func TestRunnerWriter(t *testing.T) {
 func TestGetRunnerWriters(t *testing.T) {
 	stdout, stderr := GetRunnerWriters()
 
-	if stdout == nil {
-		t.Error("GetRunnerWriters() stdout is nil")
-	}
-
-	if stderr == nil {
-		t.Error("GetRunnerWriters() stderr is nil")
-	}
-
-	if stdout == stderr {
-		t.Error("GetRunnerWriters() stdout and stderr should be different writers")
-	}
+	assert.NotNil(t, stdout, "GetRunnerWriters() stdout should not be nil")
+	assert.NotNil(t, stderr, "GetRunnerWriters() stderr should not be nil")
+	assert.NotEqual(t, stdout, stderr, "GetRunnerWriters() stdout and stderr should be different writers")
 
 	// verify `stdout` and `stderr` implement `io.Writer`
 	var _ io.Writer = stdout

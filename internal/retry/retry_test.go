@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func setRetryTimings(t *testing.T) func() {
@@ -71,21 +73,14 @@ func TestUnlimitedRetry(t *testing.T) {
 
 			result, err := UnlimitedRetry("test-operation", trackedFn)
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got nil")
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			if result != tt.expectedValue {
-				t.Errorf("expected value %v but got %v", tt.expectedValue, result)
-			}
-
-			if callCount != tt.expectedCalls {
-				t.Errorf("expected %d calls but got %d", tt.expectedCalls, callCount)
-			}
+			assert.Equal(t, tt.expectedValue, result)
+			assert.Equal(t, tt.expectedCalls, callCount)
 		})
 	}
 }
@@ -157,21 +152,14 @@ func TestLimitedRetry(t *testing.T) {
 
 			result, err := LimitedRetry("test-operation", trackedFn)
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got nil")
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			if result != tt.expectedValue {
-				t.Errorf("expected value %v but got %v", tt.expectedValue, result)
-			}
-
-			if callCount != tt.expectedCalls {
-				t.Errorf("expected %d calls but got %d", tt.expectedCalls, callCount)
-			}
+			assert.Equal(t, tt.expectedValue, result)
+			assert.Equal(t, tt.expectedCalls, callCount)
 		})
 	}
 }
@@ -212,13 +200,8 @@ func TestRetryConfiguration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := retry("test", tt.fn, tt.cfg)
-			if err == nil {
-				t.Fatal("expected error but got nil")
-			}
-
-			if err.Error() != tt.want.Error() {
-				t.Errorf("got error %q, want %q", err, tt.want)
-			}
+			assert.Error(t, err)
+			assert.Equal(t, tt.want.Error(), err.Error())
 		})
 	}
 }
@@ -229,13 +212,8 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 			return "test", nil
 		})
 
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-
-		if result != "test" {
-			t.Errorf("expected string \"test\" but got %s", result)
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, "test", result)
 	})
 
 	t.Run("works with int", func(t *testing.T) {
@@ -243,13 +221,8 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 			return 123, nil
 		})
 
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-
-		if result != 123 {
-			t.Errorf("expected int 123 but got %d", result)
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, 123, result)
 	})
 
 	type testStruct struct {
@@ -261,12 +234,7 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 			return testStruct{value: "test"}, nil
 		})
 
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-
-		if result.value != "test" {
-			t.Errorf("expected 'test' in struct.value but got %s", result.value)
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, "test", result.value)
 	})
 }

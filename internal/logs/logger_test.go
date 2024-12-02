@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"log"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type logTest struct {
@@ -42,13 +43,9 @@ func runLogTests(t *testing.T, tests []logTest) {
 			output := captureTestOutput(t, tt)
 
 			if tt.shouldLog {
-				if !strings.Contains(output, tt.expectedOutput) {
-					t.Errorf("expected output to contain %q, got %q", tt.expectedOutput, output)
-				}
+				assert.Contains(t, output, tt.expectedOutput, "Log output should contain expected message")
 			} else {
-				if output != "" {
-					t.Errorf("expected no output, got %q", output)
-				}
+				assert.Empty(t, output, "Log output should be empty")
 			}
 		})
 	}
@@ -100,9 +97,7 @@ func TestSetLevel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			SetLevel(tt.level)
-			if logger.level != tt.expectedLevel {
-				t.Errorf("SetLevel(%s) = %d, want %d", tt.level, logger.level, tt.expectedLevel)
-			}
+			assert.Equal(t, tt.expectedLevel, logger.level, "Logger level should be set correctly")
 		})
 	}
 }
@@ -263,9 +258,11 @@ func TestColorDisabling(t *testing.T) {
 
 	Init()
 
-	if ColorReset != "" || ColorRed != "" || ColorYellow != "" || ColorBlue != "" || ColorCyan != "" {
-		t.Error("Colors should be empty strings when NO_COLOR is set")
-	}
+	assert.Empty(t, ColorReset, "ColorReset should be empty when NO_COLOR is set")
+	assert.Empty(t, ColorRed, "ColorRed should be empty when NO_COLOR is set")
+	assert.Empty(t, ColorYellow, "ColorYellow should be empty when NO_COLOR is set")
+	assert.Empty(t, ColorBlue, "ColorBlue should be empty when NO_COLOR is set")
+	assert.Empty(t, ColorCyan, "ColorCyan should be empty when NO_COLOR is set")
 
 	ColorReset = origReset
 	ColorRed = origRed

@@ -1,8 +1,9 @@
 package config
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateURL(t *testing.T) {
@@ -52,18 +53,11 @@ func TestValidateURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateURL(tt.url, tt.fieldName)
 
-			if tt.expectError && err == nil {
-				t.Error("Expected error but got nil")
-				return
-			}
-
-			if !tt.expectError && err != nil {
-				t.Errorf("Unexpected error: %v", err)
-				return
-			}
-
-			if tt.expectError && !strings.Contains(err.Error(), tt.errorMsg) {
-				t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

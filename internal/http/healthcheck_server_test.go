@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHealthCheckHandler(t *testing.T) {
@@ -36,26 +39,18 @@ func TestHealthCheckHandler(t *testing.T) {
 
 			handleHealthCheck(w, req)
 
-			if got := w.Code; got != tt.expectedStatus {
-				t.Errorf("handleHealthCheck() status = %v, want %v", got, tt.expectedStatus)
-			}
+			assert.Equal(t, tt.expectedStatus, w.Code, "unexpected status code")
 
 			if tt.wantBody {
 				var response struct {
 					Status string `json:"status"`
 				}
 
-				if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-					t.Errorf("failed to decode response body: %v", err)
-				}
+				err := json.NewDecoder(w.Body).Decode(&response)
+				require.NoError(t, err, "failed to decode response body")
 
-				if response.Status != "ok" {
-					t.Errorf("handleHealthCheck() status = %v, want %v", response.Status, "ok")
-				}
-
-				if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
-					t.Errorf("handleHealthCheck() Content-Type = %v, want %v", contentType, "application/json")
-				}
+				assert.Equal(t, "ok", response.Status, "unexpected status in response")
+				assert.Equal(t, "application/json", w.Header().Get("Content-Type"), "unexpected Content-Type header")
 			}
 		})
 	}
@@ -69,10 +64,8 @@ func TestHealthCheckHandlerEncodingError(t *testing.T) {
 	}
 	handleHealthCheck(failingWriter, req)
 
-	if failingWriter.statusCode != http.StatusInternalServerError {
-		t.Errorf("handleHealthCheck() with encoding error, status = %v, want %v",
-			failingWriter.statusCode, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, failingWriter.statusCode,
+		"unexpected status code for encoding error")
 }
 
 type failingWriter struct {
@@ -95,20 +88,9 @@ func (w *failingWriter) WriteHeader(statusCode int) {
 func TestNewHealthCheckServer(t *testing.T) {
 	server := NewHealthCheckServer("5680")
 
-	if server == nil {
-		t.Fatal("NewHealthCheckServer() returned nil")
-		return
-	}
+	require.NotNil(t, server, "server should not be nil")
 
-	if server.Addr != ":5680" {
-		t.Errorf("NewHealthCheckServer() addr = %v, want %v", server.Addr, ":5680")
-	}
-
-	if server.ReadTimeout != readTimeout {
-		t.Errorf("NewHealthCheckServer() readTimeout = %v, want %v", server.ReadTimeout, readTimeout)
-	}
-
-	if server.WriteTimeout != writeTimeout {
-		t.Errorf("NewHealthCheckServer() writeTimeout = %v, want %v", server.WriteTimeout, writeTimeout)
-	}
+	assert.Equal(t, ":5680", server.Addr, "unexpected server address")
+	assert.Equal(t, readTimeout, server.ReadTimeout, "unexpected read timeout")
+	assert.Equal(t, writeTimeout, server.WriteTimeout, "unexpected write timeout")
 }

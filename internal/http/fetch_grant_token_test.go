@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"task-runner-launcher/internal/retry"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -21,34 +23,32 @@ func TestFetchGrantToken(t *testing.T) {
 		name          string
 		serverURL     string
 		authToken     string
-		serverFn      func(w http.ResponseWriter, r *http.Request)
+		serverFn      func(w http.ResponseWriter, r *http.Request, t *testing.T)
 		wantErr       bool
 		errorContains string
 	}{
 		{
 			name:      "successful request",
 			authToken: "test-token",
-			serverFn: func(w http.ResponseWriter, _ *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request, t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"data": map[string]string{
 						"token": "test-grant-token",
 					},
-				}); err != nil {
-					t.Errorf("Failed to encode response: %v", err)
-				}
+				})
+				require.NoError(t, err, "Failed to encode response")
 			},
 		},
 		{
 			name:      "invalid response json",
 			authToken: "test-token",
-			serverFn: func(w http.ResponseWriter, _ *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request, t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				if _, err := w.Write([]byte("invalid json")); err != nil {
-					t.Errorf("Failed to write response: %v", err)
-				}
+				_, err := w.Write([]byte("invalid json"))
+				require.NoError(t, err, "Failed to write response")
 			},
 			wantErr:       true,
 			errorContains: "failed to decode grant token response",
@@ -56,7 +56,7 @@ func TestFetchGrantToken(t *testing.T) {
 		{
 			name:      "server error",
 			authToken: "test-token",
-			serverFn: func(w http.ResponseWriter, _ *http.Request) {
+			serverFn: func(w http.ResponseWriter, _ *http.Request, _ *testing.T) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
 			wantErr:       true,
@@ -65,62 +65,53 @@ func TestFetchGrantToken(t *testing.T) {
 		{
 			name:      "verify request body",
 			authToken: "test-auth-token",
-			serverFn: func(w http.ResponseWriter, r *http.Request) {
+			serverFn: func(w http.ResponseWriter, r *http.Request, t *testing.T) {
 				var body struct {
 					Token string `json:"token"`
 				}
-				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-					t.Errorf("Failed to decode request body: %v", err)
-				}
-				if body.Token != "test-auth-token" {
-					t.Errorf("Expected auth token 'test-auth-token', got %q", body.Token)
-				}
-				if r.Header.Get("Content-Type") != "application/json" {
-					t.Errorf("Expected Content-Type 'application/json', got %q", r.Header.Get("Content-Type"))
-				}
+				err := json.NewDecoder(r.Body).Decode(&body)
+				require.NoError(t, err, "Failed to decode request body")
+				assert.Equal(t, "test-auth-token", body.Token, "Unexpected auth token")
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Unexpected Content-Type header")
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				err = json.NewEncoder(w).Encode(map[string]interface{}{
 					"data": map[string]string{
 						"token": "test-grant-token",
 					},
-				}); err != nil {
-					t.Errorf("Failed to encode response: %v", err)
-				}
+				})
+				require.NoError(t, err, "Failed to encode response")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(tt.serverFn))
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				tt.serverFn(w, r, t)
+			}))
 			defer srv.Close()
 
 			token, err := FetchGrantToken(srv.URL, tt.authToken)
-			hasErr := err != nil
 
-			if hasErr != tt.wantErr {
-				t.Errorf("FetchGrantToken() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if hasErr && tt.wantErr && !strings.Contains(err.Error(), tt.errorContains) {
-				t.Errorf("Expected error containing %q, got %v", tt.errorContains, err)
-			}
-
-			if !tt.wantErr && token == "" {
-				t.Error("Expected non-empty token for successful request")
+			if tt.wantErr {
+				assert.Error(t, err, "Expected an error")
+				assert.Contains(t, err.Error(), tt.errorContains, "Error message mismatch")
+				assert.Empty(t, token, "Token should be empty on error")
+			} else {
+				assert.NoError(t, err, "Unexpected error")
+				assert.NotEmpty(t, token, "Token should not be empty")
 			}
 		})
 	}
 }
 
 func TestFetchGrantTokenInvalidURL(t *testing.T) {
-	_, err := FetchGrantToken("not-a-valid-url", "test-token")
-	if err == nil {
-		t.Error("Expected error for invalid URL, got nil")
-	}
+	token, err := FetchGrantToken("not-a-valid-url", "test-token")
+
+	assert.Error(t, err, "Expected error for invalid URL")
+	assert.Empty(t, token, "Token should be empty for invalid URL")
 }
 
 func TestFetchGrantTokenRetry(t *testing.T) {
@@ -133,26 +124,20 @@ func TestFetchGrantTokenRetry(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": map[string]string{
 				"token": "test-grant-token",
 			},
-		}); err != nil {
-			t.Errorf("Failed to encode response: %v", err)
-		}
+		})
+		require.NoError(t, err, "Failed to encode response")
 	}))
 	defer srv.Close()
 
 	token, err := FetchGrantToken(srv.URL, "test-token")
-	if err != nil {
-		t.Errorf("FetchGrantToken() unexpected error = %v", err)
-	}
-	if token == "" {
-		t.Error("Expected non-empty token after retry")
-	}
-	if tryCount != 2 {
-		t.Errorf("Expected 2 attempts, got %d", tryCount)
-	}
+
+	assert.NoError(t, err, "Unexpected error after retry")
+	assert.NotEmpty(t, token, "Expected non-empty token after retry")
+	assert.Equal(t, 2, tryCount, "Expected exactly 2 attempts")
 }
 
 func TestFetchGrantTokenConnectionFailure(t *testing.T) {
@@ -160,15 +145,7 @@ func TestFetchGrantTokenConnectionFailure(t *testing.T) {
 
 	token, err := FetchGrantToken(invalidServerURL, "test-token")
 
-	if err == nil {
-		t.Error("Expected error for connection failure, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "connection refused") {
-		t.Errorf("Expected error containing 'connection refused', got %v", err)
-	}
-
-	if token != "" {
-		t.Errorf("Expected empty token for failed connection, got %q", token)
-	}
+	assert.Error(t, err, "Expected error for connection failure")
+	assert.Contains(t, err.Error(), "connection refused", "Unexpected error message")
+	assert.Empty(t, token, "Token should be empty for failed connection")
 }

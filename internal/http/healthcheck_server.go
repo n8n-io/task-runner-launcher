@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"task-runner-launcher/internal/logs"
 	"time"
@@ -14,7 +15,26 @@ const (
 	writeTimeout    = 1 * time.Second
 )
 
-func NewHealthCheckServer(port string) *http.Server {
+// InitHealthCheckServer creates and starts the launcher's health check server
+// exposing `/healthz` at the given port, running in a goroutine.
+func InitHealthCheckServer(port string) {
+	srv := newHealthCheckServer(port)
+	go func() {
+		logs.Infof("Starting launcher's health check server at port %s", port)
+		if err := srv.ListenAndServe(); err != nil {
+			errMsg := "Health check server failed to start"
+			if opErr, ok := err.(*net.OpError); ok && opErr.Op == "listen" {
+				errMsg = fmt.Sprintf("%s: Port %s is already in use", errMsg, srv.Addr)
+			} else {
+				errMsg = fmt.Sprintf("%s: %s", errMsg, err)
+			}
+			logs.Error(errMsg)
+			return
+		}
+	}()
+}
+
+func newHealthCheckServer(port string) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc(healthCheckPath, handleHealthCheck)
 

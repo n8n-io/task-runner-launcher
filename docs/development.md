@@ -26,14 +26,14 @@ make build
 ```sh
 export N8N_RUNNERS_ENABLED=true
 export N8N_RUNNERS_MODE=external
-export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. random string
+export N8N_RUNNERS_AUTH_TOKEN=...     # random string
 pnpm start
 ```
 
 6. Start launcher:
 
 ```sh
-export N8N_RUNNERS_AUTH_TOKEN=...     # i.e. same string as in step 5
+export N8N_RUNNERS_AUTH_TOKEN=...     # same string as in step 5
 make run
 ```
 

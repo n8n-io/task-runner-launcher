@@ -9,7 +9,7 @@ git push origin v1.2.0
 
 2. Publish a [GitHub release](https://github.com/n8n-io/task-runner-launcher/releases/new) with the tag. 
 
-The [`release` workflow](./.github/workflows/release.yml) will build binaries for arm64 and amd64 and upload them to the release in the [releases page](https://github.com/n8n-io/task-runner-launcher/releases).
+The [`release` workflow](../.github/workflows/release.yml) will build binaries for arm64 and amd64 and upload them to the release in the [releases page](https://github.com/n8n-io/task-runner-launcher/releases).
 
 > [!WARNING]
 > Mark the GitHub release as `latest` and NOT as `pre-release` or the `release` workflow will not run.

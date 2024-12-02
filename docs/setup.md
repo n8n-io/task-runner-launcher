@@ -54,9 +54,9 @@ Task runner config fields:
 - Optionally, configure [Sentry error tracking](https://docs.sentry.io/platforms/go/configuration/options/) with these env vars:
 
   - `SENTRY_DSN`
-  - `DEPLOYMENT_NAME` : Mapped to `ServerName`
-  - `ENVIRONMENT` : Mapped to `Environment`
-  - `N8N_VERSION` : Mapped to `Release`
+  - `DEPLOYMENT_NAME`: Mapped to `ServerName`
+  - `ENVIRONMENT`: Mapped to `Environment`
+  - `N8N_VERSION`: Mapped to `Release`
 
 4. Run the launcher:
 

@@ -103,9 +103,8 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				// expected timeout
-				assert.True(t, true, "Expected timeout occurred")
 			case err := <-brokerUnexpectedlyReady:
-				assert.Fail(t, "Expected timeout but got error", "Error: %v", err)
+				assert.Fail(t, "Expected timeout, got %v", err)
 			}
 		})
 	}

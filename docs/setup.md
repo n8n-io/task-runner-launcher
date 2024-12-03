@@ -19,7 +19,7 @@ This launcher is intended for deployment as a sidecar container alongside one or
       "allowed-env": [
         "PATH",
         "N8N_RUNNERS_GRANT_TOKEN",
-        "N8N_RUNNERS_N8N_URI",
+        "N8N_RUNNERS_TASK_BROKER_URI",
         "N8N_RUNNERS_MAX_PAYLOAD",
         "N8N_RUNNERS_MAX_CONCURRENCY",
         "NODE_FUNCTION_ALLOW_BUILTIN",
@@ -43,13 +43,13 @@ Task runner config fields:
 
 - It is required to specify an auth token by setting `N8N_RUNNERS_AUTH_TOKEN` to a secret. The launcher will use this secret to authenticate with the n8n instance. You will also pass this `N8N_RUNNERS_AUTH_TOKEN` to the n8n instance as well.
 
-- Optionally, specify the launcher's log level by setting `N8N_LAUNCHER_LOG_LEVEL` to `debug`, `info`, `warn` or `error`. Default is `info`. You can also use `NO_COLOR=1` to disable color output.
+- Optionally, specify the launcher's log level by setting `N8N_RUNNERS_LAUNCHER_LOG_LEVEL` to `debug`, `info`, `warn` or `error`. Default is `info`. You can also use `NO_COLOR=1` to disable color output.
 
 - Optionally, specify the launcher's auto-shutdown timeout by setting `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or set it to `0` to disable. Default is `15`. The runner will exit after this timeout if it is idle for the specified duration, and will be re-launched on demand when the next task comes in.
 
-- Optionally, specify the task broker's URI (i.e. n8n instance's URI) by setting `N8N_TASK_BROKER_URI`. Default is `http://127.0.0.1:5679`.
+- Optionally, specify the task broker's URI (i.e. n8n instance's URI) by setting `N8N_RUNNERS_TASK_BROKER_URI`. Default is `http://127.0.0.1:5679`.
 
-- Optionally, specify the port for the launcher's health check server by setting `N8N_LAUNCHER_HEALTH_CHECK_PORT`. Default is `5680`. When overriding this port, be mindful of port conflicts - by default, the n8n instance uses `5678` for its regular server and `5679` for its task broker server, and the runner uses `5681` for its healthcheck server.
+- Optionally, specify the port for the launcher's health check server by setting `N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT`. Default is `5680`. When overriding this port, be mindful of port conflicts - by default, the n8n instance uses `5678` for its regular server and `5679` for its task broker server, and the runner uses `5681` for its healthcheck server.
 
 - Optionally, configure [Sentry error tracking](https://docs.sentry.io/platforms/go/configuration/options/) with these env vars:
 

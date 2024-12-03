@@ -38,4 +38,4 @@ make run
 ```
 
 > [!TIP]
-> You can use `N8N_LAUNCHER_LOG_LEVEL=debug` for granular logging and `NO_COLOR=1` to disable color output.
+> You can use `N8N_RUNNERS_LAUNCHER_LOG_LEVEL=debug` for granular logging and `NO_COLOR=1` to disable color output.

@@ -35,9 +35,9 @@ func TestLoadConfig(t *testing.T) {
 			name:          "valid configuration",
 			configContent: validConfigContent,
 			envVars: map[string]string{
-				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
-				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
-				"SENTRY_DSN":             "https://test@sentry.io/123",
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"SENTRY_DSN":                  "https://test@sentry.io/123",
 			},
 			runnerType:    "javascript",
 			expectedError: false,
@@ -46,9 +46,9 @@ func TestLoadConfig(t *testing.T) {
 			name:          "valid configuration",
 			configContent: validConfigContent,
 			envVars: map[string]string{
-				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
-				"N8N_TASK_BROKER_URI":    "http://127.0.0.1:5679",
-				"SENTRY_DSN":             "https://test@sentry.io/123",
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://127.0.0.1:5679",
+				"SENTRY_DSN":                  "https://test@sentry.io/123",
 			},
 			runnerType:    "javascript",
 			expectedError: false,
@@ -92,8 +92,8 @@ func TestConfigFileErrors(t *testing.T) {
 			configContent: "invalid json",
 			expectedError: "failed to parse config file",
 			envVars: map[string]string{
-				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
-				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
 			},
 		},
 		{
@@ -103,8 +103,8 @@ func TestConfigFileErrors(t *testing.T) {
 			}`,
 			expectedError: "found no task runner configs",
 			envVars: map[string]string{
-				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
-				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
 			},
 		},
 		{
@@ -120,8 +120,8 @@ func TestConfigFileErrors(t *testing.T) {
 			}`,
 			expectedError: "does not contain requested runner type: javascript",
 			envVars: map[string]string{
-				"N8N_RUNNERS_AUTH_TOKEN": "test-token",
-				"N8N_TASK_BROKER_URI":    "http://localhost:5679",
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
 			},
 		},
 	}

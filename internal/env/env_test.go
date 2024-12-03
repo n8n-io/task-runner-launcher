@@ -176,7 +176,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"CUSTOM_VAR2=value2",
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
-				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
 				"PATH=/usr/bin",
 				"TERM=xterm",
 				"TZ=UTC",
@@ -198,7 +198,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			expected: []string{
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
-				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
 				"PATH=/usr/bin",
 			},
 		},
@@ -216,7 +216,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			},
 			expected: []string{
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
 				"PATH=/usr/bin",
 			},
 		},

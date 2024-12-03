@@ -49,7 +49,7 @@ Task runner config fields:
 
 - Optionally, specify the task broker's URI (i.e. n8n instance's URI) by setting `N8N_TASK_BROKER_URI`. Default is `http://127.0.0.1:5679`.
 
-- Optionally, specify the port for the launcher's health check server by setting `N8N_LAUNCHER_HEALTCHECK_PORT`. Default is `5680`. When overriding this port, be mindful of port conflicts - by default, the n8n instance uses `5678` for its regular server and `5679` for its task broker server, and the runner uses `5681` for its healthcheck server. 
+- Optionally, specify the port for the launcher's health check server by setting `N8N_LAUNCHER_HEALTH_CHECK_PORT`. Default is `5680`. When overriding this port, be mindful of port conflicts - by default, the n8n instance uses `5678` for its regular server and `5679` for its task broker server, and the runner uses `5681` for its healthcheck server.
 
 - Optionally, configure [Sentry error tracking](https://docs.sentry.io/platforms/go/configuration/options/) with these env vars:
 

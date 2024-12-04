@@ -18,6 +18,7 @@ This launcher is intended for deployment as a sidecar container alongside one or
       ],
       "allowed-env": [
         "PATH",
+        "GENERIC_TIMEZONE",
         "N8N_RUNNERS_GRANT_TOKEN",
         "N8N_RUNNERS_N8N_URI",
         "N8N_RUNNERS_MAX_PAYLOAD",

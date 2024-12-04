@@ -36,7 +36,7 @@ type Config struct {
 	AutoShutdownTimeout string `env:"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT, default=15"`
 
 	// TaskBrokerURI is the URI of the task broker server.
-	TaskBrokerURI string `env:"N8N_TASK_BROKER_URI, default=http://127.0.0.1:5679"`
+	TaskBrokerURI string `env:"N8N_RUNNERS_TASK_BROKER_URI, default=http://127.0.0.1:5679"`
 
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
@@ -89,7 +89,7 @@ func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error)
 
 	// launcher
 
-	if err := validateURL(cfg.TaskBrokerURI, "N8N_TASK_BROKER_URI"); err != nil {
+	if err := validateURL(cfg.TaskBrokerURI, "N8N_RUNNERS_TASK_BROKER_URI"); err != nil {
 		cfgErrs = append(cfgErrs, err)
 	}
 

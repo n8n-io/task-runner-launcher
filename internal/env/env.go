@@ -78,7 +78,7 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 	allowedEnvs := append(defaultEnvs, cfg.Runner.AllowedEnv...)
 
 	runnerEnv := allowedOnly(allowedEnvs)
-	runnerEnv = append(runnerEnv, "N8N_RUNNERS_SERVER_ENABLED=true")
+	runnerEnv = append(runnerEnv, "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true")
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
 
 	return runnerEnv

@@ -4,7 +4,7 @@
 
 ```sh
 git tag 1.2.0
-git push origin v1.2.0
+git push origin 1.2.0
 ```
 
 2. Publish a [GitHub release](https://github.com/n8n-io/task-runner-launcher/releases/new) with the tag. 

@@ -35,6 +35,10 @@ type Config struct {
 	// before automatically shutting down, until later relaunched.
 	AutoShutdownTimeout string `env:"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT, default=15"`
 
+	// TaskTimeout is the max time (in seconds) a task may run for before it is
+	// aborted.
+	TaskTimeout string `env:"N8N_RUNNERS_TASK_TIMEOUT, default=60"`
+
 	// TaskBrokerURI is the URI of the task broker server.
 	TaskBrokerURI string `env:"N8N_RUNNERS_TASK_BROKER_URI, default=http://127.0.0.1:5679"`
 

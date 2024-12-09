@@ -158,6 +158,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			name: "includes default and allowed env vars",
 			config: &config.Config{
 				AutoShutdownTimeout: "15",
+				TaskTimeout:         "60",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
 				},
@@ -177,6 +178,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 				"TERM=xterm",
 				"TZ=UTC",
@@ -186,6 +188,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			name: "handles empty allowed env list",
 			config: &config.Config{
 				AutoShutdownTimeout: "15",
+				TaskTimeout:         "60",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{},
 				},
@@ -199,6 +202,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 			},
 		},
@@ -206,6 +210,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			name: "handles custom auto-shutdown timeout",
 			config: &config.Config{
 				AutoShutdownTimeout: "30",
+				TaskTimeout:         "60",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{},
 				},
@@ -217,6 +222,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			expected: []string{
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 			},
 		},

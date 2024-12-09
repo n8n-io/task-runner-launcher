@@ -17,6 +17,10 @@ const (
 	// EnvVarAutoShutdownTimeout is the env var for how long (in seconds) a runner
 	// may be idle for before exit.
 	EnvVarAutoShutdownTimeout = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
+
+	// EnvVarTaskTimeout is the env var for how long (in seconds) a task may run
+	// for before it is aborted.
+	EnvVarTaskTimeout = "N8N_RUNNERS_TASK_TIMEOUT"
 )
 
 const (
@@ -80,6 +84,7 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 	runnerEnv := allowedOnly(allowedEnvs)
 	runnerEnv = append(runnerEnv, "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true")
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, cfg.TaskTimeout))
 
 	return runnerEnv
 }

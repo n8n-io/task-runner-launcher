@@ -23,6 +23,7 @@ This launcher is intended for deployment as a sidecar container alongside one or
         "N8N_RUNNERS_TASK_BROKER_URI",
         "N8N_RUNNERS_MAX_PAYLOAD",
         "N8N_RUNNERS_MAX_CONCURRENCY",
+        "N8N_RUNNERS_TASK_TIMEOUT",
         "NODE_FUNCTION_ALLOW_BUILTIN",
         "NODE_FUNCTION_ALLOW_EXTERNAL",
         "NODE_OPTIONS"
@@ -58,6 +59,8 @@ Task runner config fields:
   - `DEPLOYMENT_NAME`: Mapped to `ServerName`
   - `ENVIRONMENT`: Mapped to `Environment`
   - `N8N_VERSION`: Mapped to `Release`
+
+- Optionally, set `N8N_RUNNERS_TASK_TIMEOUT` to specify how long (in seconds) a task may run for before it is aborted. Default is `60`.
 
 4. Run the launcher:
 

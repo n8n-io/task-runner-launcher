@@ -6,6 +6,8 @@ import (
 	"sort"
 	"task-runner-launcher/internal/config"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPartitionByAllowlist(t *testing.T) {
@@ -66,16 +68,16 @@ func TestPartitionByAllowlist(t *testing.T) {
 
 			included, excluded := partitionByAllowlist(tt.allowList)
 
-			if tt.expectedInclude == nil && len(included) == 0 {
-				// ok
-			} else if !reflect.DeepEqual(included, tt.expectedInclude) {
-				t.Errorf("partitionByAllowlist() included = %v, want %v", included, tt.expectedInclude)
+			if tt.expectedInclude == nil {
+				assert.Empty(t, included)
+			} else {
+				assert.Equal(t, tt.expectedInclude, included)
 			}
 
-			if tt.expectedExclude == nil && len(excluded) == 0 {
-				// ok
-			} else if !reflect.DeepEqual(excluded, tt.expectedExclude) {
-				t.Errorf("partitionByAllowlist() excluded = %v, want %v", excluded, tt.expectedExclude)
+			if tt.expectedExclude == nil {
+				assert.Empty(t, excluded)
+			} else {
+				assert.Equal(t, tt.expectedExclude, excluded)
 			}
 		})
 	}

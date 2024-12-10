@@ -37,8 +37,6 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 
 	runnerEnv := env.PrepareRunnerEnv(cfg)
 
-	logs.Debugf("Prepared env vars for runner")
-
 	for {
 		// 3. check until task broker is ready
 
@@ -89,7 +87,6 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 		logs.Debug("Task ready for pickup, launching runner...")
 		logs.Debugf("Command: %s", cfg.Runner.Command)
 		logs.Debugf("Args: %v", cfg.Runner.Args)
-		logs.Debugf("Env vars: %v", env.Keys(runnerEnv))
 
 		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
 		var wg sync.WaitGroup

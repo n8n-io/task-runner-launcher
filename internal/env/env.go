@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"task-runner-launcher/internal/config"
+	"task-runner-launcher/internal/logs"
 )
 
 const (
@@ -28,11 +29,9 @@ const (
 	RunnerServerURI = "http://127.0.0.1:5681"
 )
 
-// allowedOnly filters the current environment down to only those
-// environment variables in the allowlist.
-func allowedOnly(allowlist []string) []string {
-	var filtered []string
-
+// partitionByAllowlist divides the current env vars into those included in and
+// excluded from the allowlist.
+func partitionByAllowlist(allowlist []string) (included, excluded []string) {
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) != 2 {
@@ -40,21 +39,28 @@ func allowedOnly(allowlist []string) []string {
 		}
 
 		key := parts[0]
+		isAllowed := false
 		for _, allowedKey := range allowlist {
 			if key == allowedKey {
-				filtered = append(filtered, env)
+				included = append(included, env)
+				isAllowed = true
 				break
 			}
 		}
+		if !isAllowed {
+			excluded = append(excluded, env)
+		}
 	}
 
-	sort.Strings(filtered) // ensure consistent order
+	// ensure consistent order
+	sort.Strings(included)
+	sort.Strings(excluded)
 
-	return filtered
+	return included, excluded
 }
 
-// Keys returns the keys of the environment variables.
-func Keys(env []string) []string {
+// keys returns the keys of the environment variables.
+func keys(env []string) []string {
 	keys := make([]string, len(env))
 	for i, env := range env {
 		keys[i] = strings.SplitN(env, "=", 2)[0]
@@ -81,10 +87,15 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM"}
 	allowedEnvs := append(defaultEnvs, cfg.Runner.AllowedEnv...)
 
-	runnerEnv := allowedOnly(allowedEnvs)
-	runnerEnv = append(runnerEnv, "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true")
+	includedEnvs, excludedEnvs := partitionByAllowlist(allowedEnvs)
+
+	logs.Debugf("Env vars to exclude from runner: %v", keys(excludedEnvs))
+
+	runnerEnv := append(includedEnvs, "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true")
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, cfg.TaskTimeout))
+
+	logs.Debugf("Env vars to pass to runner: %v", keys(runnerEnv))
 
 	return runnerEnv
 }

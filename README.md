@@ -10,9 +10,9 @@ CLI utility to launch an [n8n task runner](https://docs.n8n.io/PENDING) in `exte
 2024/11/29 13:37:46 DEBUG Changed into working directory
 2024/11/29 13:37:46 DEBUG Prepared env vars for runner
 2024/11/29 13:37:46 INFO  Waiting for task broker to be ready...
-2024/11/29 13:37:46 INFO  Task broker is ready
+2024/11/29 13:37:46 DEBUG Task broker is ready
 2024/11/29 13:37:46 DEBUG Fetched grant token for launcher
-2024/11/29 13:37:46 INFO  Launcher's runner ID: fc6c24b9f764ae55
+2024/11/29 13:37:46 DEBUG Launcher's runner ID: fc6c24b9f764ae55
 2024/11/29 13:37:46 DEBUG Connected: ws://127.0.0.1:5679/runners/_ws?id=fc6c24b9f764ae55
 2024/11/29 13:37:46 DEBUG <- Received message `broker:inforequest`
 2024/11/29 13:37:46 DEBUG -> Sent message `runner:info`

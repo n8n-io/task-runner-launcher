@@ -47,7 +47,7 @@ func CheckUntilBrokerReady(taskBrokerURI string) error {
 		return err
 	}
 
-	logs.Info("Task broker is ready")
+	logs.Debug("Task broker is ready")
 
 	return nil
 }

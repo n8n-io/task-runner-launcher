@@ -113,7 +113,7 @@ func Handshake(cfg HandshakeConfig) error {
 	}
 
 	runnerID := randomID()
-	logs.Infof("Launcher's runner ID: %s", runnerID)
+	logs.Debugf("Launcher's runner ID: %s", runnerID)
 
 	wsURL, err := buildWebsocketURL(cfg.TaskBrokerServerURI, runnerID)
 	if err != nil {
@@ -207,7 +207,7 @@ func Handshake(cfg HandshakeConfig) error {
 		wsConn.Close()
 		return err
 	case <-handshakeComplete:
-		logs.Info("Runner's task offer was accepted")
+		logs.Debug("Runner's task offer was accepted")
 		return nil
 	}
 }

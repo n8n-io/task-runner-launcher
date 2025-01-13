@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/n8n-io/task-runner-launcher/graph/badge.svg?token=NW1BW05Q5P)](https://codecov.io/gh/n8n-io/task-runner-launcher)
 
-CLI utility to launch an [n8n task runner](https://docs.n8n.io/PENDING) in `external` mode. The launcher's purpose is to minimize resource use by launching a runner on demand, i.e. only when no runner is available and when a task is ready for pickup. It also makes sure the runner stays responsive and recovers from crashes.
+CLI utility to launch an [n8n task runner](https://docs.n8n.io/hosting/configuration/task-runners/) in `external` mode. The launcher's purpose is to minimize resource use by launching a runner on demand, i.e. only when no runner is available and when a task is ready for pickup. It also makes sure the runner stays responsive and recovers from crashes.
 
 ```
 ./task-runner-launcher javascript

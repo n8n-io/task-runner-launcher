@@ -20,7 +20,7 @@ The runner will receive and complete the task and return the result. By now only
 
 ```mermaid
 sequenceDiagram
-    participant TM as Task Manager
+    participant TM as Task Requester
     participant TB as Task Broker
     participant L as Launcher
     participant TR as Task Runner

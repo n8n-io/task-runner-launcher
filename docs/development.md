@@ -2,7 +2,7 @@
 
 To set up a development environment, follow these steps:
 
-1. Install Go >=1.23, [`golangci-lint`](https://golangci-lint.run/welcome/install/) and `make`.
+1. Install Go >=1.24, [`golangci-lint`](https://golangci-lint.run/welcome/install/) and `make`.
 
 2. Clone this repository and create a [config file](setup.md).
 

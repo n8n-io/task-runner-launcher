@@ -1,6 +1,6 @@
 module task-runner-launcher
 
-go 1.24
+go 1.24.2
 
 require (
 	github.com/getsentry/sentry-go v0.29.1

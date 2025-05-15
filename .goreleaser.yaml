@@ -1,0 +1,75 @@
+# Documentation at https://goreleaser.com
+
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - main: ./cmd/launcher/main.go
+    binary: task-runner-launcher
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - freebsd
+      - linux
+      - netbsd
+      - openbsd
+      - windows
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+      - loong64
+      - mips64le
+      - ppc64le
+      - s390x
+      - riscv64
+    goarm:
+      - 6
+      - 7
+
+archives:
+  - formats: [ 'tar.gz' ]
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}"
+    wrap_in_directory: false
+    files:
+      - README.md
+      - LICENSE.md
+      - LICENSE_EE.md
+    format_overrides:
+      - goos: windows
+        formats: [ 'zip' ]
+
+checksum:
+  name_template: "{{ .ArtifactName }}.{{ .Algorithm }}"
+  algorithm: sha256
+  split: true
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  sort: '' # use the output of `git log` as is
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^tests:'
+      - '^chore:'
+      - '^Merge pull request'
+
+release:
+  draft: true

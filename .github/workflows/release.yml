@@ -21,7 +21,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: 1.24.4
+          goversion: 1.24.5
           binary_name: task-runner-launcher
           project_path: ./cmd/launcher
           sha256sum: true

@@ -27,3 +27,4 @@ CLI utility to launch an [n8n task runner](https://docs.n8n.io/hosting/configura
 - [Development](docs/development.md) - how to set up a development environment to work on the launcher
 - [Release](docs/release.md) - how to release a new version of the launcher
 - [Lifecycle](docs/lifecycle.md) - how the launcher works
+- [Environment](docs/environment.md) - how the launcher handles environment variables

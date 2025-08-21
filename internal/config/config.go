@@ -75,8 +75,11 @@ type RunnerConfig struct {
 	// Arguments for command, currently path to runner entrypoint.
 	Args []string `json:"args"`
 
-	// Env vars allowed to be passed by launcher to runner.
+	// Env vars for the launcher to pass from its own environment to the runner.
 	AllowedEnv []string `json:"allowed-env"`
+
+	// Env vars for the launcher to set directly on the runner.
+	EnvOverrides []string `json:"env-overrides"`
 }
 
 func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error) {

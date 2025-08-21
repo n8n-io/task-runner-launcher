@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"task-runner-launcher/internal/config"
@@ -14,6 +15,12 @@ const (
 	// the main instance to the launcher in exchange for the auth token.
 	// nolint:gosec // G101: False positive
 	EnvVarGrantToken = "N8N_RUNNERS_GRANT_TOKEN"
+
+	// EnvVarTaskBrokerURI is the env var for the task broker URI.
+	EnvVarTaskBrokerURI = "N8N_RUNNERS_TASK_BROKER_URI"
+
+	// EnvVarHealthCheckServerEnabled is the env var to enable the runner's health check server.
+	EnvVarHealthCheckServerEnabled = "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED"
 
 	// EnvVarAutoShutdownTimeout is the env var for how long (in seconds) a runner
 	// may be idle for before exit.
@@ -82,8 +89,32 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
+// Check for users who will be affected by the breaking change
+func checkLegacyBehavior(cfg *config.Config) {
+	timeoutEnvVars := []string{
+		EnvVarAutoShutdownTimeout,
+		EnvVarTaskTimeout,
+	}
+	for _, timeoutEnvVar := range timeoutEnvVars {
+		hasInAllowed := slices.Contains(cfg.Runner.AllowedEnv, timeoutEnvVar)
+		if !hasInAllowed {
+			logs.Warnf("DEPRECATION WARNING: %s will no longer be automatically passed to runners in a future version. Please add this env var to 'allowed-env' or use 'env-overrides' in your task runner config to maintain current behavior.", timeoutEnvVar)
+		}
+	}
+}
+
+// requiredRuntimeEnvVars are env vars that the launcher must pass to the runner.
+// These cannot be disallowed or overridden by the user.
+var requiredRuntimeEnvVars = []string{
+	EnvVarTaskBrokerURI,
+	EnvVarHealthCheckServerEnabled,
+	EnvVarGrantToken,
+}
+
 // PrepareRunnerEnv prepares the environment variables to pass to the runner.
 func PrepareRunnerEnv(cfg *config.Config) []string {
+	checkLegacyBehavior(cfg)
+
 	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM"}
 	allowedEnvs := append(defaultEnvs, cfg.Runner.AllowedEnv...)
 
@@ -91,9 +122,29 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 
 	logs.Debugf("Env vars to exclude from runner: %v", keys(excludedEnvs))
 
-	runnerEnv := append(includedEnvs, "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true")
+	runnerEnv := includedEnvs
+	for _, envVar := range requiredRuntimeEnvVars {
+		runnerEnv = Clear(runnerEnv, envVar)
+	}
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskBrokerURI, cfg.TaskBrokerURI))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=true", EnvVarHealthCheckServerEnabled))
+
+	// TODO: The next two lines are legacy behavior to remove after deprecation period.
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, cfg.TaskTimeout))
+
+	for _, override := range cfg.Runner.EnvOverrides {
+		parts := strings.SplitN(override, "=", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			if slices.Contains(requiredRuntimeEnvVars, key) {
+				logs.Warnf("Disregarded env-override for required runtime variable: %s", key)
+				continue
+			}
+			runnerEnv = Clear(runnerEnv, key)
+		}
+		runnerEnv = append(runnerEnv, override)
+	}
 
 	logs.Debugf("Env vars to pass to runner: %v", keys(runnerEnv))
 

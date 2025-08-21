@@ -173,6 +173,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			config: &config.Config{
 				AutoShutdownTimeout: "15",
 				TaskTimeout:         "60",
+				TaskBrokerURI:       "http://localhost:5679",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
 				},
@@ -192,6 +193,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 				"TERM=xterm",
@@ -203,6 +205,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			config: &config.Config{
 				AutoShutdownTimeout: "15",
 				TaskTimeout:         "60",
+				TaskBrokerURI:       "http://localhost:5679",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{},
 				},
@@ -216,6 +219,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 			},
@@ -225,6 +229,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			config: &config.Config{
 				AutoShutdownTimeout: "30",
 				TaskTimeout:         "60",
+				TaskBrokerURI:       "http://localhost:5679",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{},
 				},
@@ -236,6 +241,65 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			expected: []string{
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
+				"PATH=/usr/bin",
+			},
+		},
+		{
+			name: "handles env-overrides",
+			config: &config.Config{
+				TaskBrokerURI:       "http://localhost:5679",
+				AutoShutdownTimeout: "30",
+				TaskTimeout:         "60",
+				Runner: &config.RunnerConfig{
+					AllowedEnv:   []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+					EnvOverrides: []string{"CUSTOM_VAR1=overridden", "NEW_VAR=added"},
+				},
+			},
+			envSetup: map[string]string{
+				"PATH":        "/usr/bin",
+				"LANG":        "en_US.UTF-8",
+				"CUSTOM_VAR1": "original",
+				"CUSTOM_VAR2": "value2",
+			},
+			expected: []string{
+				"CUSTOM_VAR1=overridden",
+				"CUSTOM_VAR2=value2",
+				"LANG=en_US.UTF-8",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
+				"NEW_VAR=added",
+				"PATH=/usr/bin",
+			},
+		},
+		{
+			name: "disregards env-overrides for required runtime variables",
+			config: &config.Config{
+				TaskBrokerURI:       "http://localhost:5679",
+				AutoShutdownTimeout: "30",
+				TaskTimeout:         "60",
+				Runner: &config.RunnerConfig{
+					AllowedEnv: []string{},
+					EnvOverrides: []string{
+						"N8N_RUNNERS_TASK_BROKER_URI=http://evil:5679",
+						"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=false",
+						"CUSTOM_VAR=allowed",
+					},
+				},
+			},
+			envSetup: map[string]string{
+				"PATH": "/usr/bin",
+				"LANG": "en_US.UTF-8",
+			},
+			expected: []string{
+				"CUSTOM_VAR=allowed",
+				"LANG=en_US.UTF-8",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
 			},

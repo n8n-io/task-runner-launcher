@@ -79,7 +79,7 @@ type RunnerConfig struct {
 	AllowedEnv []string `json:"allowed-env"`
 
 	// Env vars for the launcher to set directly on the runner.
-	EnvOverrides []string `json:"env-overrides"`
+	EnvOverrides map[string]string `json:"env-overrides"`
 }
 
 func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error) {

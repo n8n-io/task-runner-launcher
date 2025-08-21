@@ -253,8 +253,11 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				AutoShutdownTimeout: "30",
 				TaskTimeout:         "60",
 				Runner: &config.RunnerConfig{
-					AllowedEnv:   []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
-					EnvOverrides: []string{"CUSTOM_VAR1=overridden", "NEW_VAR=added"},
+					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+					EnvOverrides: map[string]string{
+						"CUSTOM_VAR1": "overridden",
+						"NEW_VAR":     "added",
+					},
 				},
 			},
 			envSetup: map[string]string{
@@ -283,10 +286,10 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				TaskTimeout:         "60",
 				Runner: &config.RunnerConfig{
 					AllowedEnv: []string{},
-					EnvOverrides: []string{
-						"N8N_RUNNERS_TASK_BROKER_URI=http://evil:5679",
-						"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=false",
-						"CUSTOM_VAR=allowed",
+					EnvOverrides: map[string]string{
+						"N8N_RUNNERS_TASK_BROKER_URI":             "http://evil:5679",
+						"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED": "false",
+						"CUSTOM_VAR": "allowed",
 					},
 				},
 			},

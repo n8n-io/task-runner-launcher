@@ -132,17 +132,13 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, cfg.TaskTimeout))
 
-	for _, override := range cfg.Runner.EnvOverrides {
-		parts := strings.SplitN(override, "=", 2)
-		if len(parts) == 2 {
-			key := parts[0]
-			if slices.Contains(requiredRuntimeEnvVars, key) {
-				logs.Warnf("Disregarded env-override for required runtime variable: %s", key)
-				continue
-			}
-			runnerEnv = Clear(runnerEnv, key)
+	for key, value := range cfg.Runner.EnvOverrides {
+		if slices.Contains(requiredRuntimeEnvVars, key) {
+			logs.Warnf("Disregarded env-override for required runtime variable: %s", key)
+			continue
 		}
-		runnerEnv = append(runnerEnv, override)
+		runnerEnv = Clear(runnerEnv, key)
+		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
 	}
 
 	logs.Debugf("Env vars to pass to runner: %v", keys(runnerEnv))

@@ -16,14 +16,14 @@ Example:
         "GENERIC_TIMEZONE",
         "N8N_RUNNERS_MAX_PAYLOAD",
         "N8N_RUNNERS_MAX_CONCURRENCY",
-        "N8N_RUNNERS_TASK_TIMEOUT",
+        "N8N_RUNNERS_TASK_TIMEOUT"
       ],
-      "override-envs": [
-        "NODE_FUNCTION_ALLOW_BUILTIN=crypto",
-        "NODE_FUNCTION_ALLOW_EXTERNAL=moment"
-        "NODE_OPTIONS=--max-old-space-size=4096"
-      ]
-    },
+      "env-overrides": {
+        "NODE_FUNCTION_ALLOW_BUILTIN": "crypto",
+        "NODE_FUNCTION_ALLOW_EXTERNAL": "moment",
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    }
   ]
 }
 ```

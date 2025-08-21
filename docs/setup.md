@@ -20,15 +20,15 @@ This launcher is intended for deployment as a sidecar container alongside one or
         "PATH",
         "GENERIC_TIMEZONE",
       ],
-      "override-envs": [
-        "N8N_RUNNERS_TASK_TIMEOUT=80",
-        "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=120",
-        "N8N_RUNNERS_MAX_CONCURRENCY=3",
-        "NODE_FUNCTION_ALLOW_BUILTIN=crypto",
-        "NODE_FUNCTION_ALLOW_EXTERNAL=moment"
-        "NODE_OPTIONS=--max-old-space-size=4096",
-      ]
-    },
+      "env-overrides": {
+        "N8N_RUNNERS_TASK_TIMEOUT": "80",
+        "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "120",
+        "N8N_RUNNERS_MAX_CONCURRENCY": "3",
+        "NODE_FUNCTION_ALLOW_BUILTIN": "crypto",
+        "NODE_FUNCTION_ALLOW_EXTERNAL": "moment",
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    }
   ]
 }
 ```
@@ -39,7 +39,7 @@ Task runner config fields:
 - `workdir` is the path to directory containing the task runner binary.
 - `command` is the command to execute in order to start the task runner.
 - `args` are the args for the command to execute, currently the path to the task runner entrypoint.
-- `allowed-env` and `override-envs` are env vars that the launcher will pass through to or set directly on the runner, respectively. See [environment](environment.md).
+- `allowed-env` and `env-overrides` are env vars that the launcher will pass through to or set directly on the runner, respectively. See [environment](environment.md).
 
 3. Set the **environment variables** for the launcher.
 

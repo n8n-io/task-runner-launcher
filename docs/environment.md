@@ -28,7 +28,7 @@ Example:
 }
 ```
 
-Exceptionally, these three env vars cannot be disallowed or overriden:
+Exceptionally, these three env vars cannot be disallowed or overridden:
 
 - `N8N_RUNNERS_TASK_BROKER_URI`
 - `N8N_RUNNERS_GRANT_TOKEN`

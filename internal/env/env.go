@@ -89,7 +89,6 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
-// Check for users who will be affected by the breaking change
 func checkLegacyBehavior(cfg *config.Config) {
 	timeoutEnvVars := []string{
 		EnvVarAutoShutdownTimeout,

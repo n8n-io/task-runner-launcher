@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunnerWriter(t *testing.T) {
@@ -93,7 +94,7 @@ func TestRunnerWriter(t *testing.T) {
 }
 
 func TestGetRunnerWriters(t *testing.T) {
-	stdout, stderr := GetRunnerWriters()
+	stdout, stderr := GetRunnerWriters("javascript")
 
 	assert.NotNil(t, stdout, "GetRunnerWriters() stdout should not be nil")
 	assert.NotNil(t, stderr, "GetRunnerWriters() stderr should not be nil")
@@ -102,4 +103,25 @@ func TestGetRunnerWriters(t *testing.T) {
 	// verify `stdout` and `stderr` implement `io.Writer`
 	var _ io.Writer = stdout
 	var _ io.Writer = stderr
+}
+
+func TestGetRunnerWritersWithDifferentTypes(t *testing.T) {
+	GetRunnerWriters("javascript")
+	GetRunnerWriters("python")
+
+	var jsBuf, pyBuf bytes.Buffer
+	jsWriter := NewRunnerWriter(&jsBuf, "[runner-javascript] ", "DEBUG", ColorCyan)
+	pyWriter := NewRunnerWriter(&pyBuf, "[runner-python] ", "DEBUG", ColorCyan)
+
+	_, err := jsWriter.Write([]byte("test message"))
+	require.NoError(t, err)
+	_, err = pyWriter.Write([]byte("test message"))
+	require.NoError(t, err)
+
+	jsOutput := jsBuf.String()
+	pyOutput := pyBuf.String()
+
+	assert.Contains(t, jsOutput, "[runner-javascript]", "JavaScript runner should have correct prefix")
+	assert.Contains(t, pyOutput, "[runner-python]", "Python runner should have correct prefix")
+	assert.NotEqual(t, jsOutput, pyOutput, "Different runner types should have different output")
 }

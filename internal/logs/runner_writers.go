@@ -2,6 +2,7 @@ package logs
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -45,10 +46,11 @@ func (w *RunnerWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// GetRunnerWriters returns configured `stdout` and `stderr` writers for a runner.
-func GetRunnerWriters() (stdout io.Writer, stderr io.Writer) {
-	stdout = NewRunnerWriter(os.Stdout, "[Runner] ", "DEBUG", ColorCyan)
-	stderr = NewRunnerWriter(os.Stderr, "[Runner] ", "ERROR", ColorRed)
+// GetRunnerWriters returns configured `stdout` and `stderr` writers for a runner type.
+func GetRunnerWriters(runnerType string) (stdout io.Writer, stderr io.Writer) {
+	prefix := fmt.Sprintf("[runner-%s] ", runnerType)
+	stdout = NewRunnerWriter(os.Stdout, prefix, "DEBUG", ColorCyan)
+	stderr = NewRunnerWriter(os.Stderr, prefix, "ERROR", ColorRed)
 
 	return stdout, stderr
 }

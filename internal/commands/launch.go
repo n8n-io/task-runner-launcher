@@ -93,7 +93,7 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 
 		cmd := exec.CommandContext(ctx, cfg.Runner.Command, cfg.Runner.Args...)
 		cmd.Env = runnerEnv
-		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters()
+		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters("javascript")
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()

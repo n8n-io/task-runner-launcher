@@ -15,15 +15,19 @@ import (
 
 var configPath = "/etc/n8n-task-runners.json"
 
-var cfg Config
-
 const (
 	// EnvVarHealthCheckPort is the env var for the port for the launcher's health check server.
 	EnvVarHealthCheckPort = "N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT"
 )
 
-// Config holds the full configuration for the launcher.
-type Config struct {
+// LauncherConfig holds the full configuration for the launcher.
+type LauncherConfig struct {
+	BaseConfig    *BaseConfig
+	RunnerConfigs map[string]*RunnerConfig
+}
+
+// BaseConfig holds the configuration for the launcher, excluding runner configs.
+type BaseConfig struct {
 	// LogLevel is the log level for the launcher. Default: `info`.
 	LogLevel string `env:"N8N_RUNNERS_LAUNCHER_LOG_LEVEL, default=info"`
 
@@ -45,10 +49,6 @@ type Config struct {
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
 
-	// Runner is the runner config for the task runner, obtained from:
-	// `/etc/n8n-task-runners.json`.
-	Runner *RunnerConfig
-
 	// Sentry is the Sentry config for the launcher, a subset of what is defined in:
 	// https://docs.sentry.io/platforms/go/configuration/options/
 	Sentry *SentryConfig
@@ -62,11 +62,12 @@ type SentryConfig struct {
 	DeploymentName string `env:"DEPLOYMENT_NAME, default=unknown"`
 }
 
+// RunnerConfig holds the configuration for a single task runner.
 type RunnerConfig struct {
-	// Type of task runner, currently only "javascript" supported.
+	// Type of task runner, e.g. "javascript" or "python".
 	RunnerType string `json:"runner-type"`
 
-	// Path to dir containing launcher.
+	// Path to dir containing the runner binary.
 	WorkDir string `json:"workdir"`
 
 	// Command to start runner.
@@ -82,11 +83,14 @@ type RunnerConfig struct {
 	EnvOverrides map[string]string `json:"env-overrides"`
 }
 
-func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error) {
+// LoadLauncherConfig loads the launcher's base config from the launcher's environment and
+// loads runner configs from the config file at `/etc/n8n-task-runners.json`.
+func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*LauncherConfig, error) {
 	ctx := context.Background()
 
+	var baseConfig BaseConfig
 	if err := envconfig.ProcessWith(ctx, &envconfig.Config{
-		Target:   &cfg,
+		Target:   &baseConfig,
 		Lookuper: lookuper,
 	}); err != nil {
 		return nil, err
@@ -94,82 +98,80 @@ func LoadConfig(runnerType string, lookuper envconfig.Lookuper) (*Config, error)
 
 	var cfgErrs []error
 
-	// launcher
-
-	if err := validateURL(cfg.TaskBrokerURI, "N8N_RUNNERS_TASK_BROKER_URI"); err != nil {
+	if err := validateURL(baseConfig.TaskBrokerURI, "N8N_RUNNERS_TASK_BROKER_URI"); err != nil {
 		cfgErrs = append(cfgErrs, err)
 	}
 
-	timeoutInt, err := strconv.Atoi(cfg.AutoShutdownTimeout)
+	timeoutInt, err := strconv.Atoi(baseConfig.AutoShutdownTimeout)
 	if err != nil {
 		cfgErrs = append(cfgErrs, errs.ErrNonIntegerAutoShutdownTimeout)
 	} else if timeoutInt < 0 {
 		cfgErrs = append(cfgErrs, errs.ErrNegativeAutoShutdownTimeout)
 	}
 
-	if port, err := strconv.Atoi(cfg.HealthCheckServerPort); err != nil || port <= 0 || port >= 65536 {
+	if port, err := strconv.Atoi(baseConfig.HealthCheckServerPort); err != nil || port <= 0 || port >= 65536 {
 		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be a valid port number", EnvVarHealthCheckPort))
 	}
 
-	// runner
-
-	runnerCfg, err := readFileConfig(runnerType)
-	if err != nil {
-		cfgErrs = append(cfgErrs, err)
-	}
-
-	cfg.Runner = runnerCfg
-
-	// sentry
-
-	if cfg.Sentry.Dsn != "" {
-		if err := validateURL(cfg.Sentry.Dsn, "SENTRY_DSN"); err != nil {
+	if baseConfig.Sentry.Dsn != "" {
+		if err := validateURL(baseConfig.Sentry.Dsn, "SENTRY_DSN"); err != nil {
 			cfgErrs = append(cfgErrs, err)
 		} else {
-			cfg.Sentry.IsEnabled = true
+			baseConfig.Sentry.IsEnabled = true
 		}
+	}
+
+	// runners
+
+	runnerConfigs, err := readLauncherConfigFile(runnerTypes)
+	if err != nil {
+		cfgErrs = append(cfgErrs, err)
 	}
 
 	if len(cfgErrs) > 0 {
 		return nil, errors.Join(cfgErrs...)
 	}
 
-	return &cfg, nil
+	return &LauncherConfig{
+		BaseConfig:    &baseConfig,
+		RunnerConfigs: runnerConfigs,
+	}, nil
 }
 
-// readFileConfig reads the config file at `/etc/n8n-task-runners.json` and
-// returns the runner config for the requested runner type.
-func readFileConfig(requestedRunnerType string) (*RunnerConfig, error) {
+// readLauncherConfigFile reads the config file at `/etc/n8n-task-runners.json` and
+// returns the runner config(s) for the requested runner type(s).
+func readLauncherConfigFile(runnerTypes []string) (map[string]*RunnerConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open config file at %s: %w", configPath, err)
+		return nil, fmt.Errorf("failed to open config file at %s: %v", configPath, err)
 	}
 
-	var fileCfg struct {
+	var fileConfig struct {
 		TaskRunners []RunnerConfig `json:"task-runners"`
 	}
-	if err := json.Unmarshal(data, &fileCfg); err != nil {
+	if err := json.Unmarshal(data, &fileConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse config file at %s: %w", configPath, err)
 	}
 
-	taskRunnersNum := len(fileCfg.TaskRunners)
+	taskRunnersNum := len(fileConfig.TaskRunners)
 
 	if taskRunnersNum == 0 {
 		return nil, errs.ErrMissingRunnerConfig
 	}
 
-	var runnerCfg RunnerConfig
-	found := false
-	for _, r := range fileCfg.TaskRunners {
-		if r.RunnerType == requestedRunnerType {
-			runnerCfg = r
-			found = true
-			break
+	runnerConfigs := make(map[string]*RunnerConfig)
+	for _, runnerType := range runnerTypes {
+		found := false
+		for _, runnerConfig := range fileConfig.TaskRunners {
+			if runnerConfig.RunnerType == runnerType {
+				runnerConfigs[runnerType] = &runnerConfig
+				found = true
+				break
+			}
 		}
-	}
-
-	if !found {
-		return nil, fmt.Errorf("config file at %s does not contain requested runner type: %s", configPath, requestedRunnerType)
+		if !found {
+			return nil, fmt.Errorf("config file at %s does not contain requested runner type: %s", configPath, runnerType)
+		}
 	}
 
 	if taskRunnersNum == 1 {
@@ -178,5 +180,5 @@ func readFileConfig(requestedRunnerType string) (*RunnerConfig, error) {
 		logs.Debugf("Loaded config file with %d runner configs", taskRunnersNum)
 	}
 
-	return &runnerCfg, nil
+	return runnerConfigs, nil
 }

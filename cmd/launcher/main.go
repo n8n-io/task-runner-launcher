@@ -28,22 +28,22 @@ func main() {
 
 	runnerType := os.Args[1]
 
-	cfg, err := config.LoadConfig(runnerType, envconfig.OsLookuper())
+	launcherConfig, err := config.LoadLauncherConfig([]string{runnerType}, envconfig.OsLookuper())
 	if err != nil {
 		logs.Errorf("Failed to load config: %v", err)
 		os.Exit(1)
 	}
 
-	logs.SetLevel(cfg.LogLevel)
+	logs.SetLevel(launcherConfig.BaseConfig.LogLevel)
 
-	errorreporting.Init(cfg.Sentry)
+	errorreporting.Init(launcherConfig.BaseConfig.Sentry)
 	defer errorreporting.Close()
 
-	http.InitHealthCheckServer(cfg.HealthCheckServerPort)
+	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
 	cmd := &commands.LaunchCommand{}
 
-	if err := cmd.Execute(cfg); err != nil {
+	if err := cmd.Execute(launcherConfig, runnerType); err != nil {
 		logs.Errorf("Failed to execute `launch` command: %s", err)
 	}
 }

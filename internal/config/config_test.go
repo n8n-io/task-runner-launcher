@@ -56,7 +56,6 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			configPath = testConfigPath
 
@@ -64,7 +63,7 @@ func TestLoadConfig(t *testing.T) {
 			require.NoError(t, err, "Failed to write test config file")
 
 			lookuper := envconfig.MapLookuper(tt.envVars)
-			cfg, err := LoadConfig(tt.runnerType, lookuper)
+			cfg, err := LoadLauncherConfig([]string{"javascript"}, lookuper)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -136,7 +135,7 @@ func TestConfigFileErrors(t *testing.T) {
 			}
 
 			lookuper := envconfig.MapLookuper(tt.envVars)
-			cfg, err := LoadConfig("javascript", lookuper)
+			cfg, err := LoadLauncherConfig([]string{"javascript"}, lookuper)
 
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedError)

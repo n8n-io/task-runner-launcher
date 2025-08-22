@@ -161,21 +161,25 @@ func TestClear(t *testing.T) {
 
 func TestPrepareRunnerEnv(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    *config.Config
-		envSetup  map[string]string
-		expected  []string
-		setupFunc func()
-		cleanFunc func()
+		name           string
+		launcherConfig *config.LauncherConfig
+		envSetup       map[string]string
+		expected       []string
+		setupFunc      func()
+		cleanFunc      func()
 	}{
 		{
 			name: "includes default and allowed env vars",
-			config: &config.Config{
-				AutoShutdownTimeout: "15",
-				TaskTimeout:         "60",
-				TaskBrokerURI:       "http://localhost:5679",
-				Runner: &config.RunnerConfig{
-					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "15",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+					},
 				},
 			},
 			envSetup: map[string]string{
@@ -202,12 +206,16 @@ func TestPrepareRunnerEnv(t *testing.T) {
 		},
 		{
 			name: "handles empty allowed env list",
-			config: &config.Config{
-				AutoShutdownTimeout: "15",
-				TaskTimeout:         "60",
-				TaskBrokerURI:       "http://localhost:5679",
-				Runner: &config.RunnerConfig{
-					AllowedEnv: []string{},
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "15",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv: []string{},
+					},
 				},
 			},
 			envSetup: map[string]string{
@@ -226,12 +234,16 @@ func TestPrepareRunnerEnv(t *testing.T) {
 		},
 		{
 			name: "handles custom auto-shutdown timeout",
-			config: &config.Config{
-				AutoShutdownTimeout: "30",
-				TaskTimeout:         "60",
-				TaskBrokerURI:       "http://localhost:5679",
-				Runner: &config.RunnerConfig{
-					AllowedEnv: []string{},
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "30",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv: []string{},
+					},
 				},
 			},
 			envSetup: map[string]string{
@@ -248,15 +260,19 @@ func TestPrepareRunnerEnv(t *testing.T) {
 		},
 		{
 			name: "handles env-overrides",
-			config: &config.Config{
-				TaskBrokerURI:       "http://localhost:5679",
-				AutoShutdownTimeout: "30",
-				TaskTimeout:         "60",
-				Runner: &config.RunnerConfig{
-					AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
-					EnvOverrides: map[string]string{
-						"CUSTOM_VAR1": "overridden",
-						"NEW_VAR":     "added",
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "30",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						EnvOverrides: map[string]string{
+							"CUSTOM_VAR1": "overridden",
+							"NEW_VAR":     "added",
+						},
 					},
 				},
 			},
@@ -280,16 +296,21 @@ func TestPrepareRunnerEnv(t *testing.T) {
 		},
 		{
 			name: "disregards env-overrides for required runtime variables",
-			config: &config.Config{
-				TaskBrokerURI:       "http://localhost:5679",
-				AutoShutdownTimeout: "30",
-				TaskTimeout:         "60",
-				Runner: &config.RunnerConfig{
-					AllowedEnv: []string{},
-					EnvOverrides: map[string]string{
-						"N8N_RUNNERS_TASK_BROKER_URI":             "http://evil:5679",
-						"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED": "false",
-						"CUSTOM_VAR": "allowed",
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "30",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						EnvOverrides: map[string]string{
+							"N8N_RUNNERS_TASK_BROKER_URI":             "http://evil:5679",
+							"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED": "false",
+							"CUSTOM_VAR": "allowed",
+						},
 					},
 				},
 			},
@@ -320,7 +341,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				tt.setupFunc()
 			}
 
-			got := PrepareRunnerEnv(tt.config)
+			got := PrepareRunnerEnv(tt.launcherConfig.BaseConfig, tt.launcherConfig.RunnerConfigs["javascript"])
 			sort.Strings(got)
 
 			if !reflect.DeepEqual(got, tt.expected) {

@@ -33,6 +33,7 @@ const (
 
 const (
 	// URI of the runner. Used for monitoring the runner's health
+	// BUG: Harcoded value makes N8N_RUNNERS_HEALTH_CHECK_SERVER_HOST and N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT non-configurable.
 	RunnerServerURI = "http://127.0.0.1:5681"
 )
 
@@ -89,13 +90,13 @@ func Clear(envVars []string, envVarName string) []string {
 	return result
 }
 
-func checkLegacyBehavior(cfg *config.Config) {
+func checkLegacyBehavior(runnerConfig *config.RunnerConfig) {
 	timeoutEnvVars := []string{
 		EnvVarAutoShutdownTimeout,
 		EnvVarTaskTimeout,
 	}
 	for _, timeoutEnvVar := range timeoutEnvVars {
-		hasInAllowed := slices.Contains(cfg.Runner.AllowedEnv, timeoutEnvVar)
+		hasInAllowed := slices.Contains(runnerConfig.AllowedEnv, timeoutEnvVar)
 		if !hasInAllowed {
 			logs.Warnf("DEPRECATION WARNING: %s will no longer be automatically passed to runners in a future version. Please add this env var to 'allowed-env' or use 'env-overrides' in your task runner config to maintain current behavior.", timeoutEnvVar)
 		}
@@ -111,11 +112,11 @@ var requiredRuntimeEnvVars = []string{
 }
 
 // PrepareRunnerEnv prepares the environment variables to pass to the runner.
-func PrepareRunnerEnv(cfg *config.Config) []string {
-	checkLegacyBehavior(cfg)
+func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.RunnerConfig) []string {
+	checkLegacyBehavior(runnerConfig)
 
 	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM"}
-	allowedEnvs := append(defaultEnvs, cfg.Runner.AllowedEnv...)
+	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
 
 	includedEnvs, excludedEnvs := partitionByAllowlist(allowedEnvs)
 
@@ -125,14 +126,14 @@ func PrepareRunnerEnv(cfg *config.Config) []string {
 	for _, envVar := range requiredRuntimeEnvVars {
 		runnerEnv = Clear(runnerEnv, envVar)
 	}
-	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskBrokerURI, cfg.TaskBrokerURI))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskBrokerURI, baseConfig.TaskBrokerURI))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=true", EnvVarHealthCheckServerEnabled))
 
 	// TODO: The next two lines are legacy behavior to remove after deprecation period.
-	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, cfg.AutoShutdownTimeout))
-	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, cfg.TaskTimeout))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, baseConfig.TaskTimeout))
 
-	for key, value := range cfg.Runner.EnvOverrides {
+	for key, value := range runnerConfig.EnvOverrides {
 		if slices.Contains(requiredRuntimeEnvVars, key) {
 			logs.Warnf("Disregarded env-override for required runtime variable: %s", key)
 			continue

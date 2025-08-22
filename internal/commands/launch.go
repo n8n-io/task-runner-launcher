@@ -22,31 +22,34 @@ type Command interface {
 
 type LaunchCommand struct{}
 
-func (l *LaunchCommand) Execute(cfg *config.Config) error {
+func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerType string) error {
 	logs.Info("Starting launcher...")
+
+	baseConfig := launcherConfig.BaseConfig
+	runnerConfig := launcherConfig.RunnerConfigs[runnerType]
 
 	// 1. change into working directory
 
-	if err := os.Chdir(cfg.Runner.WorkDir); err != nil {
-		return fmt.Errorf("failed to chdir into configured dir (%s): %w", cfg.Runner.WorkDir, err)
+	if err := os.Chdir(runnerConfig.WorkDir); err != nil {
+		return fmt.Errorf("failed to chdir into configured dir (%s): %w", runnerConfig.WorkDir, err)
 	}
 
-	logs.Debugf("Changed into working directory: %s", cfg.Runner.WorkDir)
+	logs.Debugf("Changed into working directory: %s", runnerConfig.WorkDir)
 
 	// 2. prepare env vars to pass to runner
 
-	runnerEnv := env.PrepareRunnerEnv(cfg)
+	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig)
 
 	for {
 		// 3. check until task broker is ready
 
-		if err := http.CheckUntilBrokerReady(cfg.TaskBrokerURI); err != nil {
+		if err := http.CheckUntilBrokerReady(baseConfig.TaskBrokerURI); err != nil {
 			return fmt.Errorf("encountered error while waiting for broker to be ready: %w", err)
 		}
 
 		// 4. fetch grant token for launcher
 
-		launcherGrantToken, err := http.FetchGrantToken(cfg.TaskBrokerURI, cfg.AuthToken)
+		launcherGrantToken, err := http.FetchGrantToken(baseConfig.TaskBrokerURI, baseConfig.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
@@ -56,8 +59,8 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 		// 5. connect to main and wait for task offer to be accepted
 
 		handshakeCfg := ws.HandshakeConfig{
-			TaskType:            cfg.Runner.RunnerType,
-			TaskBrokerServerURI: cfg.TaskBrokerURI,
+			TaskType:            runnerConfig.RunnerType,
+			TaskBrokerServerURI: launcherConfig.BaseConfig.TaskBrokerURI,
 			GrantToken:          launcherGrantToken,
 		}
 
@@ -73,7 +76,7 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 
 		// 6. fetch grant token for runner
 
-		runnerGrantToken, err := http.FetchGrantToken(cfg.TaskBrokerURI, cfg.AuthToken)
+		runnerGrantToken, err := http.FetchGrantToken(baseConfig.TaskBrokerURI, baseConfig.AuthToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}
@@ -85,15 +88,15 @@ func (l *LaunchCommand) Execute(cfg *config.Config) error {
 		// 8. launch runner
 
 		logs.Debug("Task ready for pickup, launching runner...")
-		logs.Debugf("Command: %s", cfg.Runner.Command)
-		logs.Debugf("Args: %v", cfg.Runner.Args)
+		logs.Debugf("Command: %s", runnerConfig.Command)
+		logs.Debugf("Args: %v", runnerConfig.Args)
 
 		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
 		var wg sync.WaitGroup
 
-		cmd := exec.CommandContext(ctx, cfg.Runner.Command, cfg.Runner.Args...)
+		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
 		cmd.Env = runnerEnv
-		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters("javascript")
+		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(runnerType)
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()

@@ -1,10 +1,48 @@
 # Setup
 
-This launcher is intended for deployment as a sidecar container alongside one or more n8n instance containers. The launcher exposes a health check endpoint at `/healthz` on port `5680` for liveness checks, and the n8n instance does so on port `5681`. The orchestrator (e.g. k8s) can use this to monitor the health of the launcher and of the n8n instance.
+To set up the launcher:
 
-1. Download the **launcher binary** from the [releases page](https://github.com/n8n-io/task-runner-launcher/releases).
+1. Download the latest launcher binary from the [releases page](https://github.com/n8n-io/task-runner-launcher/releases).
 
-2. Create a **config file** on the host at `/etc/n8n-task-runners.json` and make this file accessible to the launcher.
+2. Create a [config file](#config-file) on the host and make it accessible to the launcher.
+
+3. Configure [environment variables](#environment-variables).
+
+4. Deploy the launcher as a sidecar container to an n8n main or worker instance, setting the launcher to manage one or multiple runner types.
+
+```sh
+./task-runner-launcher javascript # or
+./task-runner-launcher javascript python
+```
+
+5. Ensure your orchestrator (e.g. k8s) performs regular liveness checks on both launcher and task broker.
+
+- The launcher exposes a health check endpoint at `/healthz` on port `5680`, configurable via `N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT`.
+- The task broker exposes a health check endpoint at `/healthz` on port `5679`, configurable via `N8N_RUNNERS_BROKER_PORT`.
+
+```mermaid
+sequenceDiagram
+    participant k8s
+    participant N8N as n8n main or worker
+    participant Launcher
+    participant Runner
+    Note over N8N: main server: 5678<br/>broker server: 5679
+    Note over Launcher: health check server: 5680
+    Note over Runner: health check server: 5681
+    
+    par k8s health checks
+        k8s->>Launcher: GET /healthz
+    and
+        k8s->>N8N: GET /healthz
+    end
+    
+    Launcher->>Runner: GET /healthz
+    N8N<<->>Runner: ws heartbeat
+```
+
+## Config file
+
+Example config file at `/etc/n8n-task-runners.json`:
 
 ```json
 {
@@ -14,12 +52,11 @@ This launcher is intended for deployment as a sidecar container alongside one or
       "workdir": "/usr/local/bin",
       "command": "/usr/local/bin/node",
       "args": [
+        "--disallow-code-generation-from-strings",
+        "--disable-proto=delete",
         "/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"
       ],
-      "allowed-env": [
-        "PATH",
-        "GENERIC_TIMEZONE",
-      ],
+      "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
       "env-overrides": {
         "N8N_RUNNERS_TASK_TIMEOUT": "80",
         "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "120",
@@ -28,41 +65,47 @@ This launcher is intended for deployment as a sidecar container alongside one or
         "NODE_FUNCTION_ALLOW_EXTERNAL": "moment",
         "NODE_OPTIONS": "--max-old-space-size=4096"
       }
+    },
+    {
+      "runner-type": "python",
+      "workdir": "/usr/local/bin",
+      "command": "/usr/local/bin/python",
+      "args": [
+        "/usr/local/lib/python3.13/site-packages/n8n/task-runner-python/main.py"
+      ],
+      "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
+      "env-overrides": {
+        "N8N_RUNNERS_TASK_TIMEOUT": "30",
+        "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "30",
+        "N8N_RUNNERS_MAX_CONCURRENCY": "2"
+      }
     }
   ]
 }
 ```
 
-Task runner config fields:
+| Property       | Description                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `runner-type`   | Type of task runner, e.g. `javascript` or `python`. The launcher can manage only one runner per type.                   |
+| `workdir`       | Path where the task runner's `command` will run.                                                                                          |
+| `command`       | Command to start the task runner.                                                                                       |
+| `args`          | Args and flags to use with `command`.                                                                                           |
+| `allowed-env`   | Env vars that the launcher will pass through from its own environment to the runner. See [environment](environment.md). |
+| `env-overrides` | Env vars that the launcher will set directly on the runner. See [environment](environment.md).                          |
 
-- `runner-type` is the type of task runner, currently only `javascript` is supported.
-- `workdir` is the path to directory containing the task runner binary.
-- `command` is the command to execute in order to start the task runner.
-- `args` are the args for the command to execute, currently the path to the task runner entrypoint.
-- `allowed-env` and `env-overrides` are env vars that the launcher will pass through to or set directly on the runner, respectively. See [environment](environment.md).
+## Environment variables
 
-3. Set the **environment variables** for the launcher.
+It is required to pass `N8N_RUNNERS_AUTH_TOKEN` to the launcher and to the n8n instance. This token will allow the launcher to authenticate with the n8n instance and to obtain a grant tokens for every runner it manages. All other env vars are optional and are listed in the [n8n docs](https://docs.n8n.io/hosting/configuration/environment-variables/task-runners).
 
-- It is required to specify an auth token by setting `N8N_RUNNERS_AUTH_TOKEN` to a secret. The launcher will use this secret to authenticate with the n8n instance. You will also pass this `N8N_RUNNERS_AUTH_TOKEN` to the n8n instance as well.
+The launcher can pass env vars to task runners in two ways, as specified in the [config file](#config-file):
 
-- Optionally, specify the launcher's log level by setting `N8N_RUNNERS_LAUNCHER_LOG_LEVEL` to `debug`, `info`, `warn` or `error`. Default is `info`. You can also use `NO_COLOR=1` to disable color output.
+| Source | Description | Purpose |
+|--------|-------------|------------|
+| `allowed-env` | Env vars filtered from the launcher's own environment | Passing env vars common to all runner types |
+| `env-overrides` | Env vars set by the launcher directly on the runner, with precedence over `allowed-env` | Passing env vars specific to a single runner type |
 
-- Optionally, specify the launcher's auto-shutdown timeout by setting `N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT` to a number of seconds, or set it to `0` to disable. Default is `15`. The runner will exit after this timeout if it is idle for the specified duration, and will be re-launched on demand when the next task comes in.
+Exceptionally, these three env vars cannot be disallowed or overridden:
 
-- Optionally, specify the task broker's URI (i.e. n8n instance's URI) by setting `N8N_RUNNERS_TASK_BROKER_URI`. Default is `http://127.0.0.1:5679`.
-
-- Optionally, specify the port for the launcher's health check server by setting `N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT`. Default is `5680`. When overriding this port, be mindful of port conflicts - by default, the n8n instance uses `5678` for its regular server and `5679` for its task broker server, and the runner uses `5681` for its health check server.
-
-- Optionally, configure [Sentry error tracking](https://docs.sentry.io/platforms/go/configuration/options/) with these env vars:
-  - `SENTRY_DSN`
-  - `DEPLOYMENT_NAME`: Mapped to `ServerName`
-  - `ENVIRONMENT`: Mapped to `Environment`
-  - `N8N_VERSION`: Mapped to `Release`
-
-- Optionally, set `N8N_RUNNERS_TASK_TIMEOUT` to specify how long (in seconds) a task may run for before it is aborted. Default is `60`.
-
-4. Run the launcher:
-
-```sh
-./task-runner-launcher javascript
-```
+- `N8N_RUNNERS_TASK_BROKER_URI`
+- `N8N_RUNNERS_GRANT_TOKEN`
+- `N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true`

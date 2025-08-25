@@ -4,7 +4,7 @@ To set up a development environment, follow these steps:
 
 1. Install Go >=1.24.6, [`golangci-lint`](https://golangci-lint.run/welcome/install/) and `make`.
 
-2. Clone this repository and create a [config file](setup.md).
+2. Clone this repository and create a [config file](setup.md#config-file).
 
 ```sh
 git clone https://github.com/n8n-io/task-runner-launcher
@@ -26,14 +26,14 @@ make build
 ```sh
 export N8N_RUNNERS_ENABLED=true
 export N8N_RUNNERS_MODE=external
-export N8N_RUNNERS_AUTH_TOKEN=...     # random string
+export N8N_RUNNERS_AUTH_TOKEN=test
 pnpm start
 ```
 
 6. Start launcher:
 
 ```sh
-export N8N_RUNNERS_AUTH_TOKEN=...     # same string as in step 5
+export N8N_RUNNERS_AUTH_TOKEN=test
 make run
 ```
 

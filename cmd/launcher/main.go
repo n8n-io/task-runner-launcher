@@ -34,14 +34,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	logs.SetLevel(launcherConfig.BaseConfig.LogLevel)
-
 	errorreporting.Init(launcherConfig.BaseConfig.Sentry)
 	defer errorreporting.Close()
 
 	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
-	cmd := &commands.LaunchCommand{}
+	logLevel := logs.ParseLevel(launcherConfig.BaseConfig.LogLevel)
+	logPrefix := logs.GetLauncherPrefix(runnerType)
+	logger := logs.NewLogger(logLevel, logPrefix)
+
+	cmd := commands.NewLaunchCommand(logger)
 
 	if err := cmd.Execute(launcherConfig, runnerType); err != nil {
 		logs.Errorf("Failed to execute `launch` command: %s", err)

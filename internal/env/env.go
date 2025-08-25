@@ -112,15 +112,13 @@ var requiredRuntimeEnvVars = []string{
 }
 
 // PrepareRunnerEnv prepares the environment variables to pass to the runner.
-func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.RunnerConfig) []string {
+func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.RunnerConfig, logger *logs.Logger) []string {
 	checkLegacyBehavior(runnerConfig)
 
 	defaultEnvs := []string{"LANG", "PATH", "TZ", "TERM"}
 	allowedEnvs := append(defaultEnvs, runnerConfig.AllowedEnv...)
 
-	includedEnvs, excludedEnvs := partitionByAllowlist(allowedEnvs)
-
-	logs.Debugf("Env vars to exclude from runner: %v", keys(excludedEnvs))
+	includedEnvs, _ := partitionByAllowlist(allowedEnvs)
 
 	runnerEnv := includedEnvs
 	for _, envVar := range requiredRuntimeEnvVars {
@@ -135,14 +133,14 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 
 	for key, value := range runnerConfig.EnvOverrides {
 		if slices.Contains(requiredRuntimeEnvVars, key) {
-			logs.Warnf("Disregarded env-override for required runtime variable: %s", key)
+			logger.Warnf("Disregarded env-override for required runtime variable: %s", key)
 			continue
 		}
 		runnerEnv = Clear(runnerEnv, key)
 		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
 	}
 
-	logs.Debugf("Env vars to pass to runner: %v", keys(runnerEnv))
+	logger.Debugf("Env vars to pass to runner: %v", keys(runnerEnv))
 
 	return runnerEnv
 }

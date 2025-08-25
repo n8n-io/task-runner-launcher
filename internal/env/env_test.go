@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sort"
 	"task-runner-launcher/internal/config"
+	"task-runner-launcher/internal/logs"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -341,7 +342,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				tt.setupFunc()
 			}
 
-			got := PrepareRunnerEnv(tt.launcherConfig.BaseConfig, tt.launcherConfig.RunnerConfigs["javascript"])
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			got := PrepareRunnerEnv(tt.launcherConfig.BaseConfig, tt.launcherConfig.RunnerConfigs["javascript"], logger)
 			sort.Strings(got)
 
 			if !reflect.DeepEqual(got, tt.expected) {

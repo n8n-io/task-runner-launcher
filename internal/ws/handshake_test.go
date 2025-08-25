@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"task-runner-launcher/internal/errs"
+	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestHandshake(t *testing.T) {
 				var msg message
 				require.NoError(t, conn.ReadJSON(&msg), "Failed to read `runner:info`")
 				assert.Equal(t, msgRunnerInfo, msg.Type, "Unexpected message type")
-				assert.Equal(t, "Launcher", msg.Name, "Unexpected name")
+				assert.Equal(t, "launcher-javascript", msg.Name, "Unexpected name")
 				assert.Equal(t, []string{"javascript"}, msg.Types, "Unexpected types")
 
 				err = conn.WriteJSON(message{Type: msgBrokerRunnerRegistered})
@@ -143,7 +144,8 @@ func TestHandshake(t *testing.T) {
 				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
 			}
 
-			err := Handshake(tt.config)
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			err := Handshake(tt.config, logger)
 
 			if tt.expectedError != "" {
 				assert.Error(t, err)
@@ -219,11 +221,12 @@ func TestHandshakeTimeout(t *testing.T) {
 
 	done := make(chan error)
 	go func() {
+		logger := logs.NewLogger(logs.InfoLevel, "")
 		done <- Handshake(HandshakeConfig{
 			TaskType:            "javascript",
 			TaskBrokerServerURI: "http://" + srv.Listener.Addr().String(),
 			GrantToken:          "test-token",
-		})
+		}, logger)
 	}()
 
 	select {

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
@@ -117,7 +118,8 @@ func TestMonitorRunnerHealth(t *testing.T) {
 			defer cancel()
 
 			var wg sync.WaitGroup
-			resultChan := monitorRunnerHealth(ctx, srv.URL, &wg)
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			resultChan := monitorRunnerHealth(ctx, srv.URL, &wg, logger)
 
 			result := <-resultChan
 			assert.Equal(t, tt.expectedStatus, result.Status, "unexpected health status")
@@ -166,7 +168,8 @@ func TestManageRunnerHealth(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			ManageRunnerHealth(ctx, cmd, srv.URL, &wg)
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
 
 			// For a healthy runner, we wait long enough for 3 health checks to pass.
 			// For an unhealthy runner, we wait long enough for 2 health checks to
@@ -202,8 +205,9 @@ func TestContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
+	logger := logs.NewLogger(logs.InfoLevel, "")
 
-	resultChan := monitorRunnerHealth(ctx, srv.URL, &wg)
+	resultChan := monitorRunnerHealth(ctx, srv.URL, &wg, logger)
 
 	time.Sleep(20 * time.Millisecond) // short-lived until context is cancelled
 	cancel()

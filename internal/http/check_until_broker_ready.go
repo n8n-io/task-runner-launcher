@@ -26,8 +26,8 @@ func sendHealthRequest(taskBrokerURI string) (*http.Response, error) {
 // CheckUntilBrokerReady checks forever until the task broker is ready, i.e.
 // In case of long-running migrations, readiness may take a long time.
 // Returns nil when ready.
-func CheckUntilBrokerReady(taskBrokerURI string) error {
-	logs.Info("Waiting for task broker to be ready...")
+func CheckUntilBrokerReady(taskBrokerURI string, logger *logs.Logger) error {
+	logger.Info("Waiting for task broker to be ready...")
 
 	healthCheck := func() (string, error) {
 		resp, err := sendHealthRequest(taskBrokerURI)
@@ -47,7 +47,7 @@ func CheckUntilBrokerReady(taskBrokerURI string) error {
 		return err
 	}
 
-	logs.Debug("Task broker is ready")
+	logger.Debug("Task broker is ready")
 
 	return nil
 }

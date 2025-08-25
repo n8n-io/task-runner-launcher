@@ -20,10 +20,16 @@ type Command interface {
 	Execute() error
 }
 
-type LaunchCommand struct{}
+type LaunchCommand struct {
+	logger *logs.Logger
+}
 
-func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerType string) error {
-	logs.Info("Starting launcher...")
+func NewLaunchCommand(logger *logs.Logger) *LaunchCommand {
+	return &LaunchCommand{logger: logger}
+}
+
+func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerType string) error {
+	c.logger.Info("Starting launcher goroutine...")
 
 	baseConfig := launcherConfig.BaseConfig
 	runnerConfig := launcherConfig.RunnerConfigs[runnerType]
@@ -34,16 +40,16 @@ func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 		return fmt.Errorf("failed to chdir into configured dir (%s): %w", runnerConfig.WorkDir, err)
 	}
 
-	logs.Debugf("Changed into working directory: %s", runnerConfig.WorkDir)
+	c.logger.Debugf("Changed into working directory: %s", runnerConfig.WorkDir)
 
 	// 2. prepare env vars to pass to runner
 
-	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig)
+	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig, c.logger)
 
 	for {
 		// 3. check until task broker is ready
 
-		if err := http.CheckUntilBrokerReady(baseConfig.TaskBrokerURI); err != nil {
+		if err := http.CheckUntilBrokerReady(baseConfig.TaskBrokerURI, c.logger); err != nil {
 			return fmt.Errorf("encountered error while waiting for broker to be ready: %w", err)
 		}
 
@@ -54,7 +60,7 @@ func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 			return fmt.Errorf("failed to fetch grant token for launcher: %w", err)
 		}
 
-		logs.Debug("Fetched grant token for launcher")
+		c.logger.Debug("Fetched grant token for launcher")
 
 		// 5. connect to main and wait for task offer to be accepted
 
@@ -64,10 +70,10 @@ func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 			GrantToken:          launcherGrantToken,
 		}
 
-		err = ws.Handshake(handshakeCfg)
+		err = ws.Handshake(handshakeCfg, c.logger)
 		switch {
 		case errors.Is(err, errs.ErrServerDown):
-			logs.Warn("Task broker is down, launcher will try to reconnect...")
+			c.logger.Warn("Task broker is down, launcher will try to reconnect...")
 			time.Sleep(time.Second * 5)
 			continue // back to checking until broker ready
 		case err != nil:
@@ -81,37 +87,38 @@ func (l *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 			return fmt.Errorf("failed to fetch grant token for runner: %w", err)
 		}
 
-		logs.Debug("Fetched grant token for runner")
+		c.logger.Debug("Fetched grant token for runner")
 
 		runnerEnv = append(runnerEnv, fmt.Sprintf("N8N_RUNNERS_GRANT_TOKEN=%s", runnerGrantToken))
 
 		// 8. launch runner
 
-		logs.Debug("Task ready for pickup, launching runner...")
-		logs.Debugf("Command: %s", runnerConfig.Command)
-		logs.Debugf("Args: %v", runnerConfig.Args)
+		c.logger.Debug("Task ready for pickup, launching runner...")
+		c.logger.Debugf("Command: %s", runnerConfig.Command)
+		c.logger.Debugf("Args: %v", runnerConfig.Args)
 
 		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
 		var wg sync.WaitGroup
 
 		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
 		cmd.Env = runnerEnv
-		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(runnerType)
+		runnerPrefix := logs.GetRunnerPrefix(runnerType)
+		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(runnerPrefix)
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.ManageRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg)
+		go http.ManageRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg, c.logger)
 
 		err = cmd.Wait()
 		if err != nil && err.Error() == "signal: killed" {
-			logs.Warn("Unresponsive runner process was terminated")
+			c.logger.Warn("Unresponsive runner process was terminated")
 		} else if err != nil {
-			logs.Errorf("Runner process exited with error: %v", err)
+			c.logger.Errorf("Runner process exited with error: %v", err)
 		} else {
-			logs.Info("Runner exited on idle timeout")
+			c.logger.Info("Runner process exited on idle timeout")
 		}
 		cancelHealthMonitor()
 

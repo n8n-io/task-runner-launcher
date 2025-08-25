@@ -51,57 +51,6 @@ func runLogTests(t *testing.T, tests []logTest) {
 	}
 }
 
-func TestSetLevel(t *testing.T) {
-	tests := []struct {
-		name          string
-		level         string
-		expectedLevel Level
-	}{
-		{
-			name:          "debug level",
-			level:         "debug",
-			expectedLevel: DebugLevel,
-		},
-		{
-			name:          "info level",
-			level:         "info",
-			expectedLevel: InfoLevel,
-		},
-		{
-			name:          "warn level",
-			level:         "warn",
-			expectedLevel: WarnLevel,
-		},
-		{
-			name:          "error level",
-			level:         "error",
-			expectedLevel: ErrorLevel,
-		},
-		{
-			name:          "empty level defaults to info",
-			level:         "",
-			expectedLevel: InfoLevel,
-		},
-		{
-			name:          "invalid level defaults to info",
-			level:         "invalid",
-			expectedLevel: InfoLevel,
-		},
-		{
-			name:          "case-insensitive level handling",
-			level:         "DEBUG",
-			expectedLevel: DebugLevel,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			SetLevel(tt.level)
-			assert.Equal(t, tt.expectedLevel, logger.level, "Logger level should be set correctly")
-		})
-	}
-}
-
 func TestDebugLogs(t *testing.T) {
 	tests := []logTest{
 		{
@@ -269,4 +218,76 @@ func TestColorDisabling(t *testing.T) {
 	ColorYellow = origYellow
 	ColorBlue = origBlue
 	ColorCyan = origCyan
+}
+
+func TestGetLauncherPrefix(t *testing.T) {
+	tests := []struct {
+		name       string
+		runnerType string
+		expected   string
+	}{
+		{
+			name:       "javascript abbreviation",
+			runnerType: "javascript",
+			expected:   "[launcher:js] ",
+		},
+		{
+			name:       "python abbreviation",
+			runnerType: "python",
+			expected:   "[launcher:py] ",
+		},
+		{
+			name:       "unknown runner type uses raw name",
+			runnerType: "rust",
+			expected:   "[launcher:rust] ",
+		},
+		{
+			name:       "custom runner type",
+			runnerType: "custom-runner",
+			expected:   "[launcher:custom-runner] ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetLauncherPrefix(tt.runnerType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetRunnerPrefix(t *testing.T) {
+	tests := []struct {
+		name       string
+		runnerType string
+		expected   string
+	}{
+		{
+			name:       "javascript abbreviation",
+			runnerType: "javascript",
+			expected:   "[runner:js] ",
+		},
+		{
+			name:       "python abbreviation",
+			runnerType: "python",
+			expected:   "[runner:py] ",
+		},
+		{
+			name:       "unknown runner type uses raw name",
+			runnerType: "go",
+			expected:   "[runner:go] ",
+		},
+		{
+			name:       "custom runner type",
+			runnerType: "my-custom-runner",
+			expected:   "[runner:my-custom-runner] ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetRunnerPrefix(tt.runnerType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

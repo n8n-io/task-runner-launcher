@@ -6,19 +6,19 @@ CLI utility to launch an [n8n task runner](https://docs.n8n.io/hosting/configura
 
 ```
 ./task-runner-launcher javascript
-2024/11/29 13:37:46 INFO  Starting launcher...
-2024/11/29 13:37:46 DEBUG Changed into working directory
-2024/11/29 13:37:46 DEBUG Prepared env vars for runner
-2024/11/29 13:37:46 INFO  Waiting for task broker to be ready...
-2024/11/29 13:37:46 DEBUG Task broker is ready
-2024/11/29 13:37:46 DEBUG Fetched grant token for launcher
-2024/11/29 13:37:46 DEBUG Launcher's runner ID: fc6c24b9f764ae55
-2024/11/29 13:37:46 DEBUG Connected: ws://127.0.0.1:5679/runners/_ws?id=fc6c24b9f764ae55
-2024/11/29 13:37:46 DEBUG <- Received message `broker:inforequest`
-2024/11/29 13:37:46 DEBUG -> Sent message `runner:info`
-2024/11/29 13:37:46 DEBUG <- Received message `broker:runnerregistered`
-2024/11/29 13:37:46 DEBUG -> Sent message `runner:taskoffer` for offer ID `5990b980a04945bd`
-2024/11/29 13:37:46 INFO  Waiting for launcher's task offer to be accepted...
+2024/11/29 13:37:46 INFO  [launcher:js] Starting launcher goroutine...
+2024/11/29 13:37:46 DEBUG [launcher:js] Changed into working directory
+2024/11/29 13:37:46 DEBUG [launcher:js] Prepared env vars for runner
+2024/11/29 13:37:46 INFO  [launcher:js] Waiting for task broker to be ready...
+2024/11/29 13:37:46 DEBUG [launcher:js] Task broker is ready
+2024/11/29 13:37:46 DEBUG [launcher:js] Fetched grant token for launcher
+2024/11/29 13:37:46 DEBUG [launcher:js] Launcher ID: fc6c24b9f764ae55
+2024/11/29 13:37:46 DEBUG [launcher:js] Connected: ws://127.0.0.1:5679/runners/_ws?id=fc6c24b9f764ae55
+2024/11/29 13:37:46 DEBUG [launcher:js] <- Received message `broker:inforequest`
+2024/11/29 13:37:46 DEBUG [launcher:js] -> Sent message `runner:info`
+2024/11/29 13:37:46 DEBUG [launcher:js] <- Received message `broker:runnerregistered`
+2024/11/29 13:37:46 DEBUG [launcher:js] -> Sent message `runner:taskoffer` for offer ID `5990b980a04945bd`
+2024/11/29 13:37:46 INFO  [launcher:js] Waiting for launcher's task offer to be accepted...
 ```
 
 ## Sections

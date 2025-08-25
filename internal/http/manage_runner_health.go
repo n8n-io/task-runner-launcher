@@ -71,8 +71,9 @@ func monitorRunnerHealth(
 	ctx context.Context,
 	runnerServerURI string,
 	wg *sync.WaitGroup,
+	logger *logs.Logger,
 ) chan healthCheckResult {
-	logs.Debug("Started monitoring runner health")
+	logger.Debug("Started monitoring runner health")
 	resultChan := make(chan healthCheckResult, 1)
 
 	wg.Add(1)
@@ -89,20 +90,20 @@ func monitorRunnerHealth(
 		for {
 			select {
 			case <-ctx.Done():
-				logs.Debug("Stopped monitoring runner health")
+				logger.Debug("Stopped monitoring runner health")
 				resultChan <- healthCheckResult{Status: StatusMonitoringCancelled}
 				return
 
 			case <-ticker.C:
 				if err := sendRunnerHealthCheckRequest(runnerServerURI); err != nil {
 					failureCount++
-					logs.Warnf("Found runner unresponsive (%d/%d)", failureCount, healthCheckMaxFailures)
+					logger.Warnf("Found runner unresponsive (%d/%d)", failureCount, healthCheckMaxFailures)
 					if failureCount >= healthCheckMaxFailures {
 						resultChan <- healthCheckResult{Status: StatusUnhealthy}
 						return
 					}
 				} else {
-					logs.Debug("Found runner healthy")
+					logger.Debug("Found runner healthy")
 					failureCount = 0
 				}
 			}
@@ -118,14 +119,15 @@ func ManageRunnerHealth(
 	cmd *exec.Cmd,
 	runnerServerURI string,
 	wg *sync.WaitGroup,
+	logger *logs.Logger,
 ) {
-	resultChan := monitorRunnerHealth(ctx, runnerServerURI, wg)
+	resultChan := monitorRunnerHealth(ctx, runnerServerURI, wg, logger)
 
 	go func() {
 		result := <-resultChan
 		switch result.Status {
 		case StatusUnhealthy:
-			logs.Warn("Found runner unresponsive too many times, terminating runner...")
+			logger.Warn("Found runner unresponsive too many times, terminating runner...")
 			if err := cmd.Process.Kill(); err != nil {
 				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 			}

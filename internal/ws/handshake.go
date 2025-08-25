@@ -72,7 +72,7 @@ func buildWebsocketURL(taskBrokerServerURI, runnerID string) (*url.URL, error) {
 	return u, nil
 }
 
-func connectToWebsocket(wsURL *url.URL, grantToken string) (*websocket.Conn, error) {
+func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) (*websocket.Conn, error) {
 	reqHeader := map[string][]string{
 		"Authorization": {fmt.Sprintf("Bearer %s", grantToken)},
 	}
@@ -87,7 +87,7 @@ func connectToWebsocket(wsURL *url.URL, grantToken string) (*websocket.Conn, err
 		return nil, fmt.Errorf("websocket connection failed: %w", err)
 	}
 
-	logs.Debugf("Connected: %s", wsURL.String())
+	logger.Debugf("Connected: %s", wsURL.String())
 
 	return wsConn, nil
 }
@@ -107,20 +107,20 @@ func isWsCloseError(err error) bool {
 // registers, sends a non-expiring task offer, and receives the accept for that
 // offer. Note that the handshake completes only once this task offer is accepted,
 // which may take time.
-func Handshake(cfg HandshakeConfig) error {
+func Handshake(cfg HandshakeConfig, logger *logs.Logger) error {
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("received invalid handshake config: %w", err)
 	}
 
 	runnerID := randomID()
-	logs.Debugf("Launcher's runner ID: %s", runnerID)
+	logger.Debugf("Launcher ID: %s", runnerID)
 
 	wsURL, err := buildWebsocketURL(cfg.TaskBrokerServerURI, runnerID)
 	if err != nil {
 		return fmt.Errorf("failed to build websocket URL: %w", err)
 	}
 
-	wsConn, err := connectToWebsocket(wsURL, cfg.GrantToken)
+	wsConn, err := connectToWebsocket(wsURL, cfg.GrantToken, logger)
 	if err != nil {
 		return err
 	}
@@ -146,21 +146,21 @@ func Handshake(cfg HandshakeConfig) error {
 				return
 			}
 
-			logs.Debugf("<- Received message `%s`", msg.Type)
+			logger.Debugf("<- Received message `%s`", msg.Type)
 
 			switch msg.Type {
 			case msgBrokerInfoRequest:
 				msg := message{
 					Type:  msgRunnerInfo,
 					Types: []string{cfg.TaskType},
-					Name:  "Launcher",
+					Name:  fmt.Sprintf("launcher-%s", cfg.TaskType),
 				}
 				if err := wsConn.WriteJSON(msg); err != nil {
 					errReceived <- fmt.Errorf("failed to send runner info: %w", err)
 					return
 				}
 
-				logs.Debugf("-> Sent message `%s`", msg.Type)
+				logger.Debugf("-> Sent message `%s`", msg.Type)
 
 			case msgBrokerRunnerRegistered:
 				msg := message{
@@ -175,8 +175,8 @@ func Handshake(cfg HandshakeConfig) error {
 					return
 				}
 
-				logs.Debugf("-> Sent message `%s` for offer ID `%s`", msg.Type, msg.OfferID)
-				logs.Info("Waiting for launcher's task offer to be accepted...")
+				logger.Debugf("-> Sent message `%s` for offer ID `%s`", msg.Type, msg.OfferID)
+				logger.Info("Waiting for launcher's task offer to be accepted...")
 
 			case msgBrokerTaskOfferAccept:
 				msg := message{
@@ -189,11 +189,11 @@ func Handshake(cfg HandshakeConfig) error {
 					return
 				}
 
-				logs.Debugf("-> Sent message `%s` for task ID `%s`", msg.Type, msg.TaskID)
+				logger.Debugf("-> Sent message `%s` for task ID `%s`", msg.Type, msg.TaskID)
 
 				wsConn.Close() // disregard close error, handshake already completed
 
-				logs.Debugf("Disconnected: %s", wsURL.String())
+				logger.Debugf("Disconnected: %s", wsURL.String())
 
 				close(handshakeComplete)
 
@@ -207,7 +207,7 @@ func Handshake(cfg HandshakeConfig) error {
 		wsConn.Close()
 		return err
 	case <-handshakeComplete:
-		logs.Debug("Runner's task offer was accepted")
+		logger.Debug("Runner's task offer was accepted")
 		return nil
 	}
 }

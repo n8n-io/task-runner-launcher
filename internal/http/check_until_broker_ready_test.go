@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
@@ -43,7 +44,8 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 
 			done := make(chan error)
 			go func() {
-				done <- CheckUntilBrokerReady(srv.URL)
+				logger := logs.NewLogger(logs.InfoLevel, "")
+				done <- CheckUntilBrokerReady(srv.URL, logger)
 			}()
 
 			select {
@@ -97,7 +99,8 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 
 			brokerUnexpectedlyReady := make(chan error)
 			go func() {
-				brokerUnexpectedlyReady <- CheckUntilBrokerReady(srv.URL)
+				logger := logs.NewLogger(logs.InfoLevel, "")
+				brokerUnexpectedlyReady <- CheckUntilBrokerReady(srv.URL, logger)
 			}()
 
 			select {

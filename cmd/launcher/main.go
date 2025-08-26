@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
+	"sync"
 	"task-runner-launcher/internal/commands"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/errorreporting"
@@ -16,19 +16,19 @@ import (
 
 func main() {
 	flag.Usage = func() {
-		fmt.Printf("Usage: %s [runner-type]\n", os.Args[0])
+		fmt.Printf("Usage: %s [runner-type(s)]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 
 	if len(os.Args) < 2 {
-		os.Stderr.WriteString("Missing runner-type argument")
+		os.Stderr.WriteString("Missing runner-type argument(s)\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	runnerType := os.Args[1]
+	runnerTypes := os.Args[1:]
 
-	launcherConfig, err := config.LoadLauncherConfig([]string{runnerType}, envconfig.OsLookuper())
+	launcherConfig, err := config.LoadLauncherConfig(runnerTypes, envconfig.OsLookuper())
 	if err != nil {
 		logs.Errorf("Failed to load config: %v", err)
 		os.Exit(1)
@@ -39,13 +39,23 @@ func main() {
 
 	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
-	logLevel := logs.ParseLevel(launcherConfig.BaseConfig.LogLevel)
-	logPrefix := logs.GetLauncherPrefix(runnerType)
-	logger := logs.NewLogger(logLevel, logPrefix)
+	var wg sync.WaitGroup
 
-	cmd := commands.NewLaunchCommand(logger)
+	for _, runnerType := range runnerTypes {
+		wg.Add(1)
+		go func(rt string) {
+			defer wg.Done()
 
-	if err := cmd.Execute(launcherConfig, runnerType); err != nil {
-		logs.Errorf("Failed to execute `launch` command: %s", err)
+			logLevel := logs.ParseLevel(launcherConfig.BaseConfig.LogLevel)
+			logPrefix := logs.GetLauncherPrefix(runnerType)
+			logger := logs.NewLogger(logLevel, logPrefix)
+
+			cmd := commands.NewLaunchCommand(logger)
+			if err := cmd.Execute(launcherConfig, rt); err != nil {
+				logger.Errorf("Failed to execute `launch` command: %v", err)
+			}
+		}(runnerType)
 	}
+
+	wg.Wait()
 }

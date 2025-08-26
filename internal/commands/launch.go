@@ -45,6 +45,7 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 	// 2. prepare env vars to pass to runner
 
 	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig, c.logger)
+	runnerServerURI := fmt.Sprintf("http://%s:%s", baseConfig.RunnerHealthCheckServerHost, baseConfig.RunnerHealthCheckServerPort)
 
 	for {
 		// 3. check until task broker is ready
@@ -110,7 +111,7 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.ManageRunnerHealth(ctx, cmd, env.RunnerServerURI, &wg, c.logger)
+		go http.ManageRunnerHealth(ctx, cmd, runnerServerURI, &wg, c.logger)
 
 		err = cmd.Wait()
 		if err != nil && err.Error() == "signal: killed" {

@@ -31,12 +31,6 @@ const (
 	EnvVarTaskTimeout = "N8N_RUNNERS_TASK_TIMEOUT"
 )
 
-const (
-	// URI of the runner. Used for monitoring the runner's health
-	// BUG: Harcoded value makes N8N_RUNNERS_HEALTH_CHECK_SERVER_HOST and N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT non-configurable.
-	RunnerServerURI = "http://127.0.0.1:5681"
-)
-
 // partitionByAllowlist divides the current env vars into those included in and
 // excluded from the allowlist.
 func partitionByAllowlist(allowlist []string) (included, excluded []string) {

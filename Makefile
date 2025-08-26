@@ -38,4 +38,4 @@ test-coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	open coverage.html
 
-.PHONY: build check lint lintfix fmt fmt-check run run-many test test-verbose test-coverage
+.PHONY: build check lint lintfix fmt fmt-check run run-all test test-verbose test-coverage

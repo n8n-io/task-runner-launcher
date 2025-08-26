@@ -19,8 +19,8 @@ const (
 // exposing `/healthz` at the given port, running in a goroutine.
 func InitHealthCheckServer(port string) {
 	srv := newHealthCheckServer(port)
+	logs.Infof("Starting launcher's health check server at port %s", port)
 	go func() {
-		logs.Infof("Starting launcher's health check server at port %s", port)
 		if err := srv.ListenAndServe(); err != nil {
 			errMsg := "Health check server failed to start"
 			if opErr, ok := err.(*net.OpError); ok && opErr.Op == "listen" {

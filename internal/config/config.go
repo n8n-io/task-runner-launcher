@@ -49,6 +49,12 @@ type BaseConfig struct {
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
 
+	// RunnerHealthCheckServerHost is the host for the runner's health check server.
+	RunnerHealthCheckServerHost string `env:"N8N_RUNNERS_HEALTH_CHECK_SERVER_HOST, default=127.0.0.1"`
+
+	// RunnerHealthCheckServerPort is the port for the runner's health check server.
+	RunnerHealthCheckServerPort string `env:"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT, default=5681"`
+
 	// Sentry is the Sentry config for the launcher, a subset of what is defined in:
 	// https://docs.sentry.io/platforms/go/configuration/options/
 	Sentry *SentryConfig

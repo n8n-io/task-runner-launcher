@@ -116,7 +116,7 @@ func (l *Logger) Infof(msg string, xs ...interface{}) {
 
 func (l *Logger) Warn(msg string) {
 	if l.level <= WarnLevel {
-		l.warn.Printf("%sWARN %s%s%s", ColorYellow, l.prefix, msg, ColorReset)
+		l.warn.Printf("%sWARN  %s%s%s", ColorYellow, l.prefix, msg, ColorReset)
 	}
 }
 

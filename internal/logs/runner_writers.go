@@ -26,8 +26,28 @@ func NewRunnerWriter(w io.Writer, prefix string, level string, color string) *Ru
 	}
 }
 
+var (
+	shouldLogDebug  bool
+	logLevelChecked bool
+)
+
+func initLogLevel() {
+	if !logLevelChecked {
+		logLevel := strings.ToUpper(os.Getenv("N8N_RUNNERS_LAUNCHER_LOG_LEVEL"))
+		shouldLogDebug = logLevel == "DEBUG" || logLevel == ""
+		logLevelChecked = true
+	}
+}
+
 // Write implements `io.Writer` and adds color, timestamp, level and a prefix to each line.
 func (w *RunnerWriter) Write(p []byte) (n int, err error) {
+	if w.level == "DEBUG" {
+		initLogLevel()
+		if !shouldLogDebug {
+			return len(p), nil
+		}
+	}
+
 	scanner := bufio.NewScanner(strings.NewReader(string(p)))
 
 	for scanner.Scan() {

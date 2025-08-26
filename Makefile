@@ -24,7 +24,7 @@ lint:
 run: build
 	./bin/main javascript
 
-run-many: build
+run-all: build
 	./bin/main javascript python
 
 test:

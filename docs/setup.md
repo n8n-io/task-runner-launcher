@@ -20,6 +20,8 @@ To set up the launcher:
 - The launcher exposes a health check endpoint at `/healthz` on port `5680`, configurable via `N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT`.
 - The task broker exposes a health check endpoint at `/healthz` on port `5679`, configurable via `N8N_RUNNERS_BROKER_PORT`.
 
+<br>
+
 ```mermaid
 sequenceDiagram
     participant k8s
@@ -56,6 +58,7 @@ Example config file at `/etc/n8n-task-runners.json`:
         "--disable-proto=delete",
         "/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"
       ],
+      "health-check-server-port": "5681",
       "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
       "env-overrides": {
         "N8N_RUNNERS_TASK_TIMEOUT": "80",
@@ -73,6 +76,7 @@ Example config file at `/etc/n8n-task-runners.json`:
       "args": [
         "/usr/local/lib/python3.13/site-packages/n8n/task-runner-python/main.py"
       ],
+      "health-check-server-port": "5682", 
       "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
       "env-overrides": {
         "N8N_RUNNERS_TASK_TIMEOUT": "30",
@@ -90,6 +94,7 @@ Example config file at `/etc/n8n-task-runners.json`:
 | `workdir`       | Path where the task runner's `command` will run.                                                                                          |
 | `command`       | Command to start the task runner.                                                                                       |
 | `args`          | Args and flags to use with `command`.                                                                                           |
+| `health-check-server-port` | Port for the runner's health check server. When a single runner is configured, this is optional and defaults to `5681`. When multiple runners are configured, this is required and must be unique per runner.
 | `allowed-env`   | Env vars that the launcher will pass through from its own environment to the runner. See [environment](environment.md). |
 | `env-overrides` | Env vars that the launcher will set directly on the runner. See [environment](environment.md).                          |
 
@@ -104,8 +109,9 @@ The launcher can pass env vars to task runners in two ways, as specified in the 
 | `allowed-env` | Env vars filtered from the launcher's own environment | Passing env vars common to all runner types |
 | `env-overrides` | Env vars set by the launcher directly on the runner, with precedence over `allowed-env` | Passing env vars specific to a single runner type |
 
-Exceptionally, these three env vars cannot be disallowed or overridden:
+Exceptionally, these four env vars cannot be disallowed or overridden:
 
 - `N8N_RUNNERS_TASK_BROKER_URI`
 - `N8N_RUNNERS_GRANT_TOKEN`
 - `N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true`
+- `N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT`

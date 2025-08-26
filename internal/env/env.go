@@ -22,6 +22,9 @@ const (
 	// EnvVarHealthCheckServerEnabled is the env var to enable the runner's health check server.
 	EnvVarHealthCheckServerEnabled = "N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED"
 
+	// EnvVarHealthCheckServerPort is the env var for the runner's health check server port.
+	EnvVarHealthCheckServerPort = "N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT"
+
 	// EnvVarAutoShutdownTimeout is the env var for how long (in seconds) a runner
 	// may be idle for before exit.
 	EnvVarAutoShutdownTimeout = "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"
@@ -103,6 +106,7 @@ var requiredRuntimeEnvVars = []string{
 	EnvVarTaskBrokerURI,
 	EnvVarHealthCheckServerEnabled,
 	EnvVarGrantToken,
+	EnvVarHealthCheckServerPort,
 }
 
 // PrepareRunnerEnv prepares the environment variables to pass to the runner.
@@ -120,6 +124,7 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 	}
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskBrokerURI, baseConfig.TaskBrokerURI))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=true", EnvVarHealthCheckServerEnabled))
+	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarHealthCheckServerPort, runnerConfig.HealthCheckServerPort))
 
 	// TODO: The next two lines are legacy behavior to remove after deprecation period.
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))

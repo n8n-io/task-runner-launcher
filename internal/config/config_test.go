@@ -143,3 +143,127 @@ func TestConfigFileErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRunnerPorts(t *testing.T) {
+	tests := []struct {
+		name          string
+		runnerConfigs map[string]*RunnerConfig
+		expectedError string
+	}{
+		{
+			name: "valid unique ports",
+			runnerConfigs: map[string]*RunnerConfig{
+				"javascript": {HealthCheckServerPort: "5681"},
+				"python":     {HealthCheckServerPort: "5682"},
+			},
+			expectedError: "",
+		},
+		{
+			name: "duplicate ports",
+			runnerConfigs: map[string]*RunnerConfig{
+				"javascript": {HealthCheckServerPort: "5681"},
+				"python":     {HealthCheckServerPort: "5681"},
+			},
+			expectedError: "cannot use the same health-check-server-port",
+		},
+		{
+			name: "reserved port conflict",
+			runnerConfigs: map[string]*RunnerConfig{
+				"javascript": {HealthCheckServerPort: "5679"},
+			},
+			expectedError: "conflicts with n8n broker server",
+		},
+		{
+			name: "invalid port number",
+			runnerConfigs: map[string]*RunnerConfig{
+				"javascript": {HealthCheckServerPort: "not-a-port"},
+			},
+			expectedError: "must be a valid port number",
+		},
+		{
+			name: "port out of range",
+			runnerConfigs: map[string]*RunnerConfig{
+				"javascript": {HealthCheckServerPort: "70000"},
+			},
+			expectedError: "must be a valid port number",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRunnerPorts(tt.runnerConfigs)
+			if tt.expectedError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+		})
+	}
+}
+
+func TestBackwardsCompatibilityPortDefaults(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		runnerTypes   []string
+		expectError   bool
+		expectedPorts map[string]string
+	}{
+		{
+			name: "single runner gets default port",
+			configContent: `{
+				"task-runners": [{
+					"runner-type": "javascript",
+					"workdir": "/test",
+					"command": "node",
+					"args": ["test.js"]
+				}]
+			}`,
+			runnerTypes: []string{"javascript"},
+			expectedPorts: map[string]string{
+				"javascript": "5681",
+			},
+		},
+		{
+			name: "multiple runners require explicit ports",
+			configContent: `{
+				"task-runners": [
+					{
+						"runner-type": "javascript",
+						"workdir": "/test",
+						"command": "node",
+						"args": ["test.js"]
+					},
+					{
+						"runner-type": "python", 
+						"workdir": "/test",
+						"command": "python",
+						"args": ["test.py"]
+					}
+				]
+			}`,
+			runnerTypes: []string{"javascript", "python"},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath = filepath.Join(t.TempDir(), "test-config.json")
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
+			require.NoError(t, err)
+
+			configs, err := readLauncherConfigFile(tt.runnerTypes)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				for runnerType, expectedPort := range tt.expectedPorts {
+					assert.Equal(t, expectedPort, configs[runnerType].HealthCheckServerPort)
+				}
+			}
+		})
+	}
+}

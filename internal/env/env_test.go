@@ -3,6 +3,7 @@ package env
 import (
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/logs"
@@ -179,7 +180,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				},
 				RunnerConfigs: map[string]*config.RunnerConfig{
 					"javascript": {
-						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						AllowedEnv:            []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						HealthCheckServerPort: "5681",
 					},
 				},
 			},
@@ -198,6 +200,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
@@ -215,7 +218,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				},
 				RunnerConfigs: map[string]*config.RunnerConfig{
 					"javascript": {
-						AllowedEnv: []string{},
+						AllowedEnv:            []string{},
+						HealthCheckServerPort: "5681",
 					},
 				},
 			},
@@ -228,6 +232,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=15",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
@@ -243,7 +248,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				},
 				RunnerConfigs: map[string]*config.RunnerConfig{
 					"javascript": {
-						AllowedEnv: []string{},
+						AllowedEnv:            []string{},
+						HealthCheckServerPort: "5681",
 					},
 				},
 			},
@@ -254,6 +260,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			expected: []string{
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
@@ -269,7 +276,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				},
 				RunnerConfigs: map[string]*config.RunnerConfig{
 					"javascript": {
-						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						AllowedEnv:            []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						HealthCheckServerPort: "5681",
 						EnvOverrides: map[string]string{
 							"CUSTOM_VAR1": "overridden",
 							"NEW_VAR":     "added",
@@ -289,6 +297,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"NEW_VAR=added",
@@ -306,7 +315,8 @@ func TestPrepareRunnerEnv(t *testing.T) {
 
 				RunnerConfigs: map[string]*config.RunnerConfig{
 					"javascript": {
-						AllowedEnv: []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						AllowedEnv:            []string{"CUSTOM_VAR1", "CUSTOM_VAR2"},
+						HealthCheckServerPort: "5681",
 						EnvOverrides: map[string]string{
 							"N8N_RUNNERS_TASK_BROKER_URI":             "http://evil:5679",
 							"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED": "false",
@@ -324,6 +334,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"LANG=en_US.UTF-8",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=60",
 				"PATH=/usr/bin",
@@ -353,6 +364,52 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			if tt.cleanFunc != nil {
 				tt.cleanFunc()
 			}
+		})
+	}
+}
+
+func TestRunnerPortPassedToEnv(t *testing.T) {
+	tests := []struct {
+		name        string
+		port        string
+		expectedEnv string
+	}{
+		{
+			name:        "standard port",
+			port:        "5683",
+			expectedEnv: "N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5683",
+		},
+		{
+			name:        "alternative port",
+			port:        "8080",
+			expectedEnv: "N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=8080",
+		},
+		{
+			name:        "high port number",
+			port:        "65000",
+			expectedEnv: "N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=65000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runnerConfig := &config.RunnerConfig{
+				HealthCheckServerPort: tt.port,
+				AllowedEnv:            []string{},
+				EnvOverrides:          map[string]string{},
+			}
+
+			baseConfig := &config.BaseConfig{
+				AutoShutdownTimeout: "15",
+				TaskTimeout:         "60",
+				TaskBrokerURI:       "http://localhost:5679",
+			}
+
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			env := PrepareRunnerEnv(baseConfig, runnerConfig, logger)
+
+			found := slices.Contains(env, tt.expectedEnv)
+			assert.True(t, found, "Expected %s in runner environment", tt.expectedEnv)
 		})
 	}
 }

@@ -12,16 +12,16 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-            
+
     steps:
       - uses: actions/checkout@v4.2.2
-    
+
       - uses: wangyoucao577/go-release-action@v1.52
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: 1.24.6
+          goversion: 1.25.0
           binary_name: task-runner-launcher
           project_path: ./cmd/launcher
           sha256sum: true

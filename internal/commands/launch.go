@@ -45,7 +45,7 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 	// 2. prepare env vars to pass to runner
 
 	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig, c.logger)
-	runnerServerURI := fmt.Sprintf("http://%s:%s", baseConfig.RunnerHealthCheckServerHost, baseConfig.RunnerHealthCheckServerPort)
+	runnerServerURI := fmt.Sprintf("http://%s:%s", baseConfig.RunnerHealthCheckServerHost, runnerConfig.HealthCheckServerPort)
 
 	for {
 		// 3. check until task broker is ready

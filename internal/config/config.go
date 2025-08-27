@@ -49,11 +49,8 @@ type BaseConfig struct {
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
 
-	// RunnerHealthCheckServerHost is the host for the runner's health check server.
+	// RunnerHealthCheckServerHost is the host for all runners' health check servers.
 	RunnerHealthCheckServerHost string `env:"N8N_RUNNERS_HEALTH_CHECK_SERVER_HOST, default=127.0.0.1"`
-
-	// RunnerHealthCheckServerPort is the port for the runner's health check server.
-	RunnerHealthCheckServerPort string `env:"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT, default=5681"`
 
 	// Sentry is the Sentry config for the launcher, a subset of what is defined in:
 	// https://docs.sentry.io/platforms/go/configuration/options/
@@ -81,6 +78,11 @@ type RunnerConfig struct {
 
 	// Arguments for command, currently path to runner entrypoint.
 	Args []string `json:"args"`
+
+	// Port for the runner's health check server.
+	// When a single runner is configured, this is optional and defaults to 5681.
+	// When multiple runners are configured, this is required and must be unique per runner.
+	HealthCheckServerPort string `json:"health-check-server-port,omitempty"`
 
 	// Env vars for the launcher to pass from its own environment to the runner.
 	AllowedEnv []string `json:"allowed-env"`
@@ -180,6 +182,24 @@ func readLauncherConfigFile(runnerTypes []string) (map[string]*RunnerConfig, err
 		}
 	}
 
+	if len(runnerConfigs) == 1 {
+		for _, config := range runnerConfigs {
+			if config.HealthCheckServerPort == "" {
+				config.HealthCheckServerPort = "5681"
+			}
+		}
+	} else {
+		for runnerType, config := range runnerConfigs {
+			if config.HealthCheckServerPort == "" {
+				return nil, fmt.Errorf("runner %s: health-check-server-port is required with multiple runners", runnerType)
+			}
+		}
+	}
+
+	if err := validateRunnerPorts(runnerConfigs); err != nil {
+		return nil, err
+	}
+
 	if taskRunnersNum == 1 {
 		logs.Debug("Loaded config file with a single runner config")
 	} else {
@@ -187,4 +207,34 @@ func readLauncherConfigFile(runnerTypes []string) (map[string]*RunnerConfig, err
 	}
 
 	return runnerConfigs, nil
+}
+
+func validateRunnerPorts(runnerConfigs map[string]*RunnerConfig) error {
+	reservedPorts := map[string]string{
+		"5678": "n8n main server",
+		"5679": "n8n broker server",
+		"5680": "launcher health check server",
+	}
+
+	usedPorts := make(map[string]string)
+
+	for runnerType, config := range runnerConfigs {
+		port := config.HealthCheckServerPort
+
+		if port, err := strconv.Atoi(port); err != nil || port <= 0 || port >= 65536 {
+			return fmt.Errorf("runner %s: health-check-server-port must be a valid port number", runnerType)
+		}
+
+		if service, exists := reservedPorts[port]; exists {
+			return fmt.Errorf("runner %s: health-check-server-port %s conflicts with %s", runnerType, port, service)
+		}
+
+		if existingRunner, exists := usedPorts[port]; exists {
+			return fmt.Errorf("runners %s and %s cannot use the same health-check-server-port %s", existingRunner, runnerType, port)
+		}
+
+		usedPorts[port] = runnerType
+	}
+
+	return nil
 }

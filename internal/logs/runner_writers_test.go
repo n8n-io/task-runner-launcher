@@ -102,8 +102,8 @@ func TestGetRunnerWriters(t *testing.T) {
 	assert.NotEqual(t, stdout, stderr, "GetRunnerWriters() stdout and stderr should be different writers")
 
 	// verify `stdout` and `stderr` implement `io.Writer`
-	var _ io.Writer = stdout
-	var _ io.Writer = stderr
+	_ = io.Writer(stdout)
+	_ = io.Writer(stderr)
 }
 
 func TestGetRunnerWritersWithDifferentTypes(t *testing.T) {

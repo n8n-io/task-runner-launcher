@@ -45,12 +45,9 @@ func partitionByAllowlist(allowlist []string) (included, excluded []string) {
 
 		key := parts[0]
 		isAllowed := false
-		for _, allowedKey := range allowlist {
-			if key == allowedKey {
-				included = append(included, env)
-				isAllowed = true
-				break
-			}
+		if slices.Contains(allowlist, key) {
+			included = append(included, env)
+			isAllowed = true
 		}
 		if !isAllowed {
 			excluded = append(excluded, env)

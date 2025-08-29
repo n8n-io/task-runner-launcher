@@ -1,17 +1,24 @@
-linters:
-  enable:
-    - govet        # correctness
-    - errcheck     # error handling
-    - staticcheck  # static analysis
-    - gosec        # security
-    - revive       # best practices
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104  # disregard errors not requiring explicit handling
-      - G204  # allow subprocess launching with validated config inputs
+version: "2"
 
 run:
-  timeout: 1m
   tests: true
+  timeout: 1m
+
+linters:
+  enable:
+    - govet # correctness
+    - errcheck # error handling
+    - staticcheck # static analysis
+    - gosec # security
+    - revive # best practices
+
+  settings:
+    gosec:
+      excludes:
+        - G104 # disregard errors not requiring explicit handling
+        - G204 # allow subprocess launching with validated config inputs
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling

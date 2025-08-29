@@ -96,7 +96,7 @@ func (l *Logger) Debug(msg string) {
 	}
 }
 
-func (l *Logger) Debugf(msg string, xs ...interface{}) {
+func (l *Logger) Debugf(msg string, xs ...any) {
 	if l.level <= DebugLevel {
 		l.debug.Printf(fmt.Sprintf("%sDEBUG %s%s%s", ColorCyan, l.prefix, msg, ColorReset), xs...)
 	}
@@ -108,7 +108,7 @@ func (l *Logger) Info(msg string) {
 	}
 }
 
-func (l *Logger) Infof(msg string, xs ...interface{}) {
+func (l *Logger) Infof(msg string, xs ...any) {
 	if l.level <= InfoLevel {
 		l.info.Printf(fmt.Sprintf("%sINFO  %s%s%s", ColorBlue, l.prefix, msg, ColorReset), xs...)
 	}
@@ -120,7 +120,7 @@ func (l *Logger) Warn(msg string) {
 	}
 }
 
-func (l *Logger) Warnf(msg string, xs ...interface{}) {
+func (l *Logger) Warnf(msg string, xs ...any) {
 	if l.level <= WarnLevel {
 		l.warn.Printf(fmt.Sprintf("%sWARN %s%s%s", ColorYellow, l.prefix, msg, ColorReset), xs...)
 	}
@@ -132,7 +132,7 @@ func (l *Logger) Error(msg string) {
 	}
 }
 
-func (l *Logger) Errorf(msg string, xs ...interface{}) {
+func (l *Logger) Errorf(msg string, xs ...any) {
 	if l.level <= ErrorLevel {
 		l.err.Printf(fmt.Sprintf("%sERROR %s%s%s", ColorRed, l.prefix, msg, ColorReset), xs...)
 	}
@@ -154,7 +154,7 @@ func Debug(msg string) {
 	logger.Debug(msg)
 }
 
-func Debugf(msg string, xs ...interface{}) {
+func Debugf(msg string, xs ...any) {
 	logger.Debugf(msg, xs...)
 }
 
@@ -162,7 +162,7 @@ func Info(msg string) {
 	logger.Info(msg)
 }
 
-func Infof(msg string, xs ...interface{}) {
+func Infof(msg string, xs ...any) {
 	logger.Infof(msg, xs...)
 }
 
@@ -170,7 +170,7 @@ func Warn(v string) {
 	logger.Warn(v)
 }
 
-func Warnf(format string, xs ...interface{}) {
+func Warnf(format string, xs ...any) {
 	logger.Warnf(format, xs...)
 }
 
@@ -178,6 +178,6 @@ func Error(msg string) {
 	logger.Error(msg)
 }
 
-func Errorf(msg string, xs ...interface{}) {
+func Errorf(msg string, xs ...any) {
 	logger.Errorf(msg, xs...)
 }

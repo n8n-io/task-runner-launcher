@@ -10,42 +10,28 @@ import (
 
 // RunnerWriter wraps runner output with timestamps and prefixes.
 type RunnerWriter struct {
-	writer *log.Logger
-	prefix string
-	level  string
-	color  string
+	writer   *log.Logger
+	prefix   string
+	color    string
+	level    Level
+	minLevel Level
 }
 
 // NewRunnerWriter creates a new wrapper for runner output.
-func NewRunnerWriter(w io.Writer, prefix string, level string, color string) *RunnerWriter {
+func NewRunnerWriter(w io.Writer, prefix string, color string, level Level, minLevel Level) *RunnerWriter {
 	return &RunnerWriter{
-		writer: log.New(w, "", log.LstdFlags),
-		prefix: prefix,
-		level:  level,
-		color:  color,
-	}
-}
-
-var (
-	shouldLogDebug  bool
-	logLevelChecked bool
-)
-
-func initLogLevel() {
-	if !logLevelChecked {
-		logLevel := strings.ToUpper(os.Getenv("N8N_RUNNERS_LAUNCHER_LOG_LEVEL"))
-		shouldLogDebug = logLevel == "DEBUG" || logLevel == ""
-		logLevelChecked = true
+		writer:   log.New(w, "", log.LstdFlags),
+		prefix:   prefix,
+		level:    level,
+		color:    color,
+		minLevel: minLevel,
 	}
 }
 
 // Write implements `io.Writer` and adds color, timestamp, level and a prefix to each line.
 func (w *RunnerWriter) Write(p []byte) (n int, err error) {
-	if w.level == "DEBUG" {
-		initLogLevel()
-		if !shouldLogDebug {
-			return len(p), nil
-		}
+	if w.level < w.minLevel {
+		return len(p), nil
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(string(p)))
@@ -66,9 +52,9 @@ func (w *RunnerWriter) Write(p []byte) (n int, err error) {
 }
 
 // GetRunnerWriters returns configured `stdout` and `stderr` writers with a custom prefix.
-func GetRunnerWriters(prefix string) (stdout io.Writer, stderr io.Writer) {
-	stdout = NewRunnerWriter(os.Stdout, prefix, "DEBUG", ColorCyan)
-	stderr = NewRunnerWriter(os.Stderr, prefix, "ERROR", ColorRed)
+func GetRunnerWriters(minLevel Level, prefix string) (stdout io.Writer, stderr io.Writer) {
+	stdout = NewRunnerWriter(os.Stdout, prefix, ColorCyan, DebugLevel, minLevel)
+	stderr = NewRunnerWriter(os.Stderr, prefix, ColorRed, ErrorLevel, minLevel)
 
 	return stdout, stderr
 }

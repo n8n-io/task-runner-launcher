@@ -104,7 +104,8 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
 		cmd.Env = runnerEnv
 		runnerPrefix := logs.GetRunnerPrefix(runnerType)
-		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(runnerPrefix)
+		logLevel := logs.ParseLevel(launcherConfig.BaseConfig.LogLevel)
+		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(logLevel, runnerPrefix)
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()

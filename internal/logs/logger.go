@@ -23,6 +23,17 @@ var levelMap = map[string]Level{
 	"error": ErrorLevel,
 }
 
+var levelNames = map[Level]string{
+	DebugLevel: "DEBUG",
+	InfoLevel:  "INFO",
+	WarnLevel:  "WARN",
+	ErrorLevel: "ERROR",
+}
+
+func (l Level) String() string {
+	return levelNames[l]
+}
+
 var (
 	ColorReset  = "\033[0m"
 	ColorRed    = "\033[31m"

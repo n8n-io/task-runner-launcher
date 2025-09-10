@@ -14,17 +14,19 @@ func TestRunnerWriter(t *testing.T) {
 		name          string
 		input         string
 		prefix        string
-		level         string
 		color         string
+		level         Level
+		minLevel      Level
 		expectedParts []string
 		skipParts     []string
 	}{
 		{
-			name:   "writes single line with correct format",
-			input:  "test message",
-			prefix: "[Test] ",
-			level:  "INFO",
-			color:  ColorBlue,
+			name:     "writes single line with correct format",
+			input:    "test message",
+			prefix:   "[Test] ",
+			color:    ColorBlue,
+			level:    InfoLevel,
+			minLevel: DebugLevel,
 			expectedParts: []string{
 				ColorBlue,
 				"INFO",
@@ -34,11 +36,28 @@ func TestRunnerWriter(t *testing.T) {
 			},
 		},
 		{
-			name:   "handles multiple lines",
-			input:  "line1\nline2\nline3",
-			prefix: "[Runner] ",
-			level:  "DEBUG",
-			color:  ColorCyan,
+			name:          "skips messages below min log level",
+			input:         "test message",
+			prefix:        "[Test] ",
+			color:         ColorBlue,
+			level:         DebugLevel,
+			minLevel:      InfoLevel,
+			expectedParts: []string{},
+			skipParts: []string{
+				ColorBlue,
+				"DEBUG",
+				"[Test] ",
+				"test message",
+				ColorReset,
+			},
+		},
+		{
+			name:     "handles multiple lines",
+			input:    "line1\nline2\nline3",
+			prefix:   "[Runner] ",
+			color:    ColorCyan,
+			level:    DebugLevel,
+			minLevel: DebugLevel,
 			expectedParts: []string{
 				"[Runner] line1",
 				"[Runner] line2",
@@ -46,11 +65,12 @@ func TestRunnerWriter(t *testing.T) {
 			},
 		},
 		{
-			name:   "skips empty lines",
-			input:  "line1\n\n\nline2",
-			prefix: "[Test] ",
-			level:  "INFO",
-			color:  ColorBlue,
+			name:     "skips empty lines",
+			input:    "line1\n\n\nline2",
+			prefix:   "[Test] ",
+			color:    ColorBlue,
+			level:    InfoLevel,
+			minLevel: DebugLevel,
 			expectedParts: []string{
 				"[Test] line1",
 				"[Test] line2",
@@ -60,11 +80,12 @@ func TestRunnerWriter(t *testing.T) {
 			},
 		},
 		{
-			name:   "respects whitespace in message",
-			input:  "  indented message  ",
-			prefix: "[Test] ",
-			level:  "DEBUG",
-			color:  ColorCyan,
+			name:     "respects whitespace in message",
+			input:    "  indented message  ",
+			prefix:   "[Test] ",
+			color:    ColorCyan,
+			level:    DebugLevel,
+			minLevel: DebugLevel,
 			expectedParts: []string{
 				"[Test]   indented message  ",
 			},
@@ -74,7 +95,7 @@ func TestRunnerWriter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writer := NewRunnerWriter(&buf, tt.prefix, tt.level, tt.color)
+			writer := NewRunnerWriter(&buf, tt.prefix, tt.color, tt.level, tt.minLevel)
 
 			n, err := writer.Write([]byte(tt.input))
 			assert.NoError(t, err, "RunnerWriter.Write() should not return an error")
@@ -95,7 +116,7 @@ func TestRunnerWriter(t *testing.T) {
 
 func TestGetRunnerWriters(t *testing.T) {
 	prefix := "[runner:js] "
-	stdout, stderr := GetRunnerWriters(prefix)
+	stdout, stderr := GetRunnerWriters(DebugLevel, prefix)
 
 	assert.NotNil(t, stdout, "GetRunnerWriters() stdout should not be nil")
 	assert.NotNil(t, stderr, "GetRunnerWriters() stderr should not be nil")
@@ -107,12 +128,12 @@ func TestGetRunnerWriters(t *testing.T) {
 }
 
 func TestGetRunnerWritersWithDifferentTypes(t *testing.T) {
-	GetRunnerWriters("[runner:js] ")
-	GetRunnerWriters("[runner:py] ")
+	GetRunnerWriters(DebugLevel, "[runner:js] ")
+	GetRunnerWriters(DebugLevel, "[runner:py] ")
 
 	var jsBuf, pyBuf bytes.Buffer
-	jsWriter := NewRunnerWriter(&jsBuf, "[runner:js] ", "DEBUG", ColorCyan)
-	pyWriter := NewRunnerWriter(&pyBuf, "[runner:py] ", "DEBUG", ColorCyan)
+	jsWriter := NewRunnerWriter(&jsBuf, "[runner:js] ", ColorCyan, DebugLevel, DebugLevel)
+	pyWriter := NewRunnerWriter(&pyBuf, "[runner:py] ", ColorCyan, DebugLevel, DebugLevel)
 
 	_, err := jsWriter.Write([]byte("test message"))
 	require.NoError(t, err)

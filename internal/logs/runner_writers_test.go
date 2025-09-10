@@ -45,7 +45,7 @@ func TestRunnerWriter(t *testing.T) {
 			expectedParts: []string{},
 			skipParts: []string{
 				ColorBlue,
-				"INFO",
+				"DEBUG",
 				"[Test] ",
 				"test message",
 				ColorReset,

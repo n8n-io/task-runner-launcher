@@ -7,4 +7,4 @@ The [`release` workflow](../.github/workflows/release.yml) will build binaries f
 > [!WARNING]
 > When publishing the GitHub release, mark it as `latest` and NOT as `pre-release` or the `release` workflow will not run.
 
-2. Update the `LAUNCHER_VERSION` argument in `docker/images/n8n/Dockerfile` in the main repository.
+2. Update the `LAUNCHER_VERSION` argument in `docker/images/n8n/Dockerfile` and `docker/images/runners/Dockerfile` in the main repository.

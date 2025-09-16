@@ -1,0 +1,44 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "launcher_lib",
+    srcs = ["main.go"],
+    importpath = "task-runner-launcher/cmd/launcher",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//internal/commands",
+        "//internal/config",
+        "//internal/errorreporting",
+        "//internal/http",
+        "//internal/logs",
+        "@com_github_sethvargo_go_envconfig//:go-envconfig",
+    ],
+)
+
+go_binary(
+    name = "launcher",
+    embed = [":launcher_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "task-runner-launcher",
+    embed = [":launcher_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "task-runner-launcher-linux-amd64",
+    embed = [":launcher_lib"],
+    goarch = "amd64",
+    goos = "linux",
+    visibility = ["//visibility:public"],
+)
+
+go_binary(
+    name = "task-runner-launcher-linux-arm64",
+    embed = [":launcher_lib"],
+    goarch = "arm64",
+    goos = "linux",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,16 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "commands",
+    srcs = ["launch.go"],
+    importpath = "task-runner-launcher/internal/commands",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/config",
+        "//internal/env",
+        "//internal/errs",
+        "//internal/http",
+        "//internal/logs",
+        "//internal/ws",
+    ],
+)

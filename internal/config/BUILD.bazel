@@ -1,0 +1,30 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = [
+        "config.go",
+        "validate_url.go",
+    ],
+    importpath = "task-runner-launcher/internal/config",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/errs",
+        "//internal/logs",
+        "@com_github_sethvargo_go_envconfig//:go-envconfig",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = [
+        "config_test.go",
+        "validate_url_test.go",
+    ],
+    embed = [":config"],
+    deps = [
+        "@com_github_sethvargo_go_envconfig//:go-envconfig",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

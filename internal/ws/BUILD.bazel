@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ws",
+    srcs = ["handshake.go"],
+    importpath = "task-runner-launcher/internal/ws",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/errs",
+        "//internal/logs",
+        "@com_github_gorilla_websocket//:websocket",
+    ],
+)
+
+go_test(
+    name = "ws_test",
+    srcs = ["handshake_test.go"],
+    embed = [":ws"],
+    deps = [
+        "//internal/errs",
+        "//internal/logs",
+        "@com_github_gorilla_websocket//:websocket",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

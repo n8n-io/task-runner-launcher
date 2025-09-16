@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errorreporting",
+    srcs = ["sentry.go"],
+    importpath = "task-runner-launcher/internal/errorreporting",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/config",
+        "//internal/logs",
+        "@com_github_getsentry_sentry_go//:sentry-go",
+    ],
+)
+
+go_test(
+    name = "errorreporting_test",
+    srcs = ["sentry_test.go"],
+    embed = [":errorreporting"],
+    deps = [
+        "//internal/config",
+        "@com_github_getsentry_sentry_go//:sentry-go",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

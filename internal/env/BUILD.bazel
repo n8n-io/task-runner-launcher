@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "env",
+    srcs = ["env.go"],
+    importpath = "task-runner-launcher/internal/env",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/config",
+        "//internal/logs",
+    ],
+)
+
+go_test(
+    name = "env_test",
+    srcs = ["env_test.go"],
+    embed = [":env"],
+    deps = [
+        "//internal/config",
+        "//internal/logs",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

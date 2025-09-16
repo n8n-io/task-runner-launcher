@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "http",
+    srcs = [
+        "check_until_broker_ready.go",
+        "fetch_grant_token.go",
+        "healthcheck_server.go",
+        "manage_runner_health.go",
+    ],
+    importpath = "task-runner-launcher/internal/http",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/logs",
+        "//internal/retry",
+    ],
+)
+
+go_test(
+    name = "http_test",
+    srcs = [
+        "check_until_broker_ready_test.go",
+        "fetch_grant_token_test.go",
+        "healthcheck_server_test.go",
+        "manage_runner_health_test.go",
+    ],
+    embed = [":http"],
+    deps = [
+        "//internal/logs",
+        "//internal/retry",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

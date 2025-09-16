@@ -1,0 +1,33 @@
+# Don't create bazel-* symlinks in the WORKSPACE directory.
+# These require .gitignore and may scare users. Also impact in the performance of jetbrains IDE, it's a workaround for
+# https://github.com/bazelbuild/rules_typescript/issues/12 which affects the common case of
+# having `tsconfig.json` in the WORKSPACE directory. Instead, you should run
+# `bazel info output_base` to find out where the outputs went.
+build --symlink_prefix=/
+
+# Habilitar Bzlmod
+common --enable_bzlmod=true
+
+# Build flags
+build --@rules_go//go/config:pure
+
+# Test flags
+test --test_output=errors
+# test --@rules_go//go/config:race  # Commented out due to conflict with pure mode
+
+# Test with race detection (separate config)
+test:race --@rules_go//go/config:race --@rules_go//go/config:pure=false
+
+# Optimization flags
+build:opt -c opt
+build:opt --copt=-O2
+build:opt --linkopt=-s
+
+# CI flags
+build:ci --verbose_failures
+build:ci --test_summary=detailed
+test:ci --test_output=all
+
+# Local development
+build:dev --disk_cache=~/.cache/bazel-disk-cache
+build:dev --repository_cache=~/.cache/bazel-repository-cache

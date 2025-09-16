@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logs",
+    srcs = [
+        "logger.go",
+        "runner_writers.go",
+    ],
+    importpath = "task-runner-launcher/internal/logs",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "logs_test",
+    srcs = [
+        "logger_test.go",
+        "runner_writers_test.go",
+    ],
+    embed = [":logs"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

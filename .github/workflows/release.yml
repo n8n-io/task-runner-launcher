@@ -10,19 +10,50 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
+            target: task-runner-launcher-linux-amd64
           - goos: linux
             goarch: arm64
+            target: task-runner-launcher-linux-arm64
             
     steps:
       - uses: actions/checkout@v4.2.2
-    
-      - uses: wangyoucao577/go-release-action@v1.52
+
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@0.8.5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          goos: ${{ matrix.goos }}
-          goarch: ${{ matrix.goarch }}
-          goversion: 1.24.6
-          binary_name: task-runner-launcher
-          project_path: ./cmd/launcher
-          sha256sum: true
-          extra_files: README.md LICENSE.md LICENSE_EE.md
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Build cross-platform binary
+        run: bazel build //cmd/launcher:${{ matrix.target }}
+
+      - name: Prepare binary for upload
+        run: |
+          mkdir -p release-assets
+          cp bazel-bin/cmd/launcher/${{ matrix.target }}_/${{ matrix.target }} release-assets/task-runner-launcher
+          chmod +x release-assets/task-runner-launcher
+          
+          # Generate SHA256 sum
+          cd release-assets
+          sha256sum task-runner-launcher > task-runner-launcher.sha256
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: release-assets/task-runner-launcher
+          asset_name: task-runner-launcher-${{ matrix.goos }}-${{ matrix.goarch }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload SHA256 Asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: release-assets/task-runner-launcher.sha256
+          asset_name: task-runner-launcher-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          asset_content_type: text/plain

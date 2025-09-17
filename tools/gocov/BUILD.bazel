@@ -1,0 +1,5 @@
+sh_binary(
+    name = "gocov",
+    srcs = ["main.sh"],
+    visibility = ["//visibility:public"],
+)

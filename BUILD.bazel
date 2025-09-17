@@ -12,3 +12,25 @@ gazelle(
     ],
     command = "update-repos",
 )
+
+# Primary aliases (HERMETIC - no local Go required!)
+alias(
+    name = "fmt",
+    actual = "//tools/gofmt",  # Uses Bazel's Go toolchain!
+)
+
+alias(
+    name = "lint",
+    actual = "//tools/golint",  # Uses Bazel's Go toolchain!
+)
+
+# Coverage and testing aliases
+alias(
+    name = "coverage",
+    actual = "//tools/gocov",  # Generate coverage report (LCOV format)
+)
+
+alias(
+    name = "test-coverage",
+    actual = "//tools/gocov",  # Same as coverage (Makefile compatibility)
+)

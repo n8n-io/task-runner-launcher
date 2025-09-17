@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "gofmt_lib",
+    srcs = ["main.go"],
+    importpath = "task-runner-launcher/tools/gofmt",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "gofmt",
+    embed = [":gofmt_lib"],
+    visibility = ["//visibility:public"],
+)

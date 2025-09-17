@@ -3,5 +3,11 @@
 bin/*
 !**/.gitkeep
 config.json
+
+# Coverage files (Bazel generates these)
+coverage-html/
+coverage_combined.dat
+
+# Legacy coverage files (from Make - can be removed eventually)
 coverage.html
 coverage.out

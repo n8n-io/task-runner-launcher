@@ -4,6 +4,8 @@
 
 CLI utility to launch an [n8n task runner](https://docs.n8n.io/hosting/configuration/task-runners/) in `external` mode. The launcher's purpose is to minimize resource use by launching a runner on demand, i.e. only when no runner is available and when a task is ready for pickup. It also makes sure the runner stays responsive and recovers from crashes.
 
+Built with **Bazel** for reproducible, hermetic builds across all environments.
+
 ```
 ./task-runner-launcher javascript
 2024/11/29 13:37:46 INFO  [launcher:js] Starting launcher goroutine...
@@ -19,6 +21,22 @@ CLI utility to launch an [n8n task runner](https://docs.n8n.io/hosting/configura
 2024/11/29 13:37:46 DEBUG [launcher:js] <- Received message `broker:runnerregistered`
 2024/11/29 13:37:46 DEBUG [launcher:js] -> Sent message `runner:taskoffer` for offer ID `5990b980a04945bd`
 2024/11/29 13:37:46 INFO  [launcher:js] Waiting for launcher's task offer to be accepted...
+```
+
+## Quick Start
+
+```bash
+brew install bazelisk
+
+# Build
+bazel build //cmd/launcher:task-runner-launcher
+
+# Run  
+bazel run //cmd/launcher:task-runner-launcher -- javascript
+
+# Test with coverage
+bazel test //...
+bazel run //:coverage  # 91.3% coverage
 ```
 
 ## Sections

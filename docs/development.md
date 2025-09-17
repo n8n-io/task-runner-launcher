@@ -73,6 +73,7 @@ bazel run //cmd/launcher:task-runner-launcher -- javascript
 | **Format**        | `bazel run //:fmt`                                            | Format Go code (hermetic) |
 | **Lint**          | `bazel run //:lint`                                           | Basic linting (hermetic)  |
 | **Cross-compile** | `bazel build //cmd/launcher:task-runner-launcher-linux-amd64` | Build for Linux AMD64     |
+| **Cross-compile** | `bazel build //cmd/launcher:task-runner-launcher-linux-arm64` | Build for Linux ARM64     |
 
 ## Benefits of Bazel Build System
 

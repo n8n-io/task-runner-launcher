@@ -168,7 +168,7 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 	taskRunnersNum := len(fileConfig.TaskRunners)
 
 	if taskRunnersNum == 0 {
-		return nil, fmt.Errorf("found no runners config file at %s", configPath)
+		return nil, fmt.Errorf("config file at %s contains no task runners", configPath)
 	}
 
 	runnerConfigs := make(map[string]*RunnerConfig)

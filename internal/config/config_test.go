@@ -103,7 +103,7 @@ func TestConfigFileErrors(t *testing.T) {
 			configContent: `{
 				"task-runners": []
 			}`,
-			expectedError: "found no runners config file",
+			expectedError: "contains no task runners",
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",

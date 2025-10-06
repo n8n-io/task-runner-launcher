@@ -152,6 +152,7 @@ func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*Lau
 // readLauncherConfigFile reads the config file at the specified path and
 // returns the runner config(s) for the requested runner type(s).
 func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string]*RunnerConfig, error) {
+	// #nosec G304 -- configPath is controlled by system administrator via environment variable
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file at %s: %v", configPath, err)

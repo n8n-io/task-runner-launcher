@@ -52,6 +52,9 @@ type BaseConfig struct {
 	// RunnerHealthCheckServerHost is the host for all runners' health check servers.
 	RunnerHealthCheckServerHost string `env:"N8N_RUNNERS_HEALTH_CHECK_SERVER_HOST, default=127.0.0.1"`
 
+	// ConfigPath is the path to the runners config file. Default: `/etc/n8n-task-runners.json`.
+	ConfigPath string `env:"N8N_RUNNERS_CONFIG_PATH, default=/etc/n8n-task-runners.json"`
+
 	// Sentry is the Sentry config for the launcher, a subset of what is defined in:
 	// https://docs.sentry.io/platforms/go/configuration/options/
 	Sentry *SentryConfig
@@ -92,7 +95,7 @@ type RunnerConfig struct {
 }
 
 // LoadLauncherConfig loads the launcher's base config from the launcher's environment and
-// loads runner configs from the config file at `/etc/n8n-task-runners.json`.
+// loads runner configs from the config file specified by N8N_RUNNERS_CONFIG_PATH.
 func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*LauncherConfig, error) {
 	ctx := context.Background()
 
@@ -131,7 +134,7 @@ func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*Lau
 
 	// runners
 
-	runnerConfigs, err := readLauncherConfigFile(runnerTypes)
+	runnerConfigs, err := readLauncherConfigFile(baseConfig.ConfigPath, runnerTypes)
 	if err != nil {
 		cfgErrs = append(cfgErrs, err)
 	}
@@ -146,9 +149,9 @@ func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*Lau
 	}, nil
 }
 
-// readLauncherConfigFile reads the config file at `/etc/n8n-task-runners.json` and
+// readLauncherConfigFile reads the config file at the specified path and
 // returns the runner config(s) for the requested runner type(s).
-func readLauncherConfigFile(runnerTypes []string) (map[string]*RunnerConfig, error) {
+func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string]*RunnerConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file at %s: %v", configPath, err)
@@ -164,7 +167,7 @@ func readLauncherConfigFile(runnerTypes []string) (map[string]*RunnerConfig, err
 	taskRunnersNum := len(fileConfig.TaskRunners)
 
 	if taskRunnersNum == 0 {
-		return nil, errs.ErrMissingRunnerConfig
+		return nil, fmt.Errorf("found no runners config file at %s", configPath)
 	}
 
 	runnerConfigs := make(map[string]*RunnerConfig)

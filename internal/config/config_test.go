@@ -37,6 +37,7 @@ func TestLoadConfig(t *testing.T) {
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 				"SENTRY_DSN":                  "https://test@sentry.io/123",
 			},
 			runnerType:    "javascript",
@@ -48,6 +49,7 @@ func TestLoadConfig(t *testing.T) {
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://127.0.0.1:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 				"SENTRY_DSN":                  "https://test@sentry.io/123",
 			},
 			runnerType:    "javascript",
@@ -93,6 +95,7 @@ func TestConfigFileErrors(t *testing.T) {
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 			},
 		},
 		{
@@ -100,10 +103,11 @@ func TestConfigFileErrors(t *testing.T) {
 			configContent: `{
 				"task-runners": []
 			}`,
-			expectedError: "found no task runner configs",
+			expectedError: "found no runners config file",
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 			},
 		},
 		{
@@ -121,6 +125,7 @@ func TestConfigFileErrors(t *testing.T) {
 			envVars: map[string]string{
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 			},
 		},
 	}
@@ -254,7 +259,7 @@ func TestBackwardsCompatibilityPortDefaults(t *testing.T) {
 			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
 			require.NoError(t, err)
 
-			configs, err := readLauncherConfigFile(tt.runnerTypes)
+			configs, err := readLauncherConfigFile(configPath, tt.runnerTypes)
 
 			if tt.expectError {
 				assert.Error(t, err)

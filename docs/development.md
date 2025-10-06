@@ -13,6 +13,12 @@ touch config.json && echo '<json-config-content>' > config.json
 sudo mv config.json /etc/n8n-task-runners.json
 ```
 
+Alternatively, use this environment variable to specify the config file path:
+
+```sh
+export N8N_RUNNERS_CONFIG_PATH=/path/to/your/config.json
+```
+
 3. Make your changes.
 
 4. Build launcher:

@@ -13,8 +13,6 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
-var configPath = "/etc/n8n-task-runners.json"
-
 const (
 	// EnvVarHealthCheckPort is the env var for the port for the launcher's health check server.
 	EnvVarHealthCheckPort = "N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT"

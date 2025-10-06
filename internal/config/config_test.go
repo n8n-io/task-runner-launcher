@@ -59,9 +59,7 @@ func TestLoadConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			configPath = testConfigPath
-
-			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
+			err := os.WriteFile(testConfigPath, []byte(tt.configContent), 0600)
 			require.NoError(t, err, "Failed to write test config file")
 
 			lookuper := envconfig.MapLookuper(tt.envVars)
@@ -132,10 +130,8 @@ func TestConfigFileErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			configPath = testConfigPath
-
 			if tt.configContent != "" {
-				err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
+				err := os.WriteFile(testConfigPath, []byte(tt.configContent), 0600)
 				require.NoError(t, err, "Failed to write test config file")
 			}
 
@@ -255,11 +251,11 @@ func TestBackwardsCompatibilityPortDefaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			configPath = filepath.Join(t.TempDir(), "test-config.json")
-			err := os.WriteFile(configPath, []byte(tt.configContent), 0600)
+			testConfigPath := filepath.Join(t.TempDir(), "test-config.json")
+			err := os.WriteFile(testConfigPath, []byte(tt.configContent), 0600)
 			require.NoError(t, err)
 
-			configs, err := readLauncherConfigFile(configPath, tt.runnerTypes)
+			configs, err := readLauncherConfigFile(testConfigPath, tt.runnerTypes)
 
 			if tt.expectError {
 				assert.Error(t, err)

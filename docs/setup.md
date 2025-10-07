@@ -44,49 +44,10 @@ sequenceDiagram
 
 ## Config file
 
-Example config file at `/etc/n8n-task-runners.json`:
+The launcher reads its config file from `/etc/n8n-task-runners.json` by default, or from the file path specified by the `N8N_RUNNERS_CONFIG_PATH` environment variable.
 
-```json
-{
-  "task-runners": [
-    {
-      "runner-type": "javascript",
-      "workdir": "/usr/local/bin",
-      "command": "/usr/local/bin/node",
-      "args": [
-        "--disallow-code-generation-from-strings",
-        "--disable-proto=delete",
-        "/usr/local/lib/node_modules/n8n/node_modules/@n8n/task-runner/dist/start.js"
-      ],
-      "health-check-server-port": "5681",
-      "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
-      "env-overrides": {
-        "N8N_RUNNERS_TASK_TIMEOUT": "80",
-        "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "120",
-        "N8N_RUNNERS_MAX_CONCURRENCY": "3",
-        "NODE_FUNCTION_ALLOW_BUILTIN": "crypto",
-        "NODE_FUNCTION_ALLOW_EXTERNAL": "moment",
-        "NODE_OPTIONS": "--max-old-space-size=4096"
-      }
-    },
-    {
-      "runner-type": "python",
-      "workdir": "/usr/local/bin",
-      "command": "/usr/local/bin/python",
-      "args": [
-        "/usr/local/lib/python3.13/site-packages/n8n/task-runner-python/main.py"
-      ],
-      "health-check-server-port": "5682", 
-      "allowed-env": ["PATH", "GENERIC_TIMEZONE"],
-      "env-overrides": {
-        "N8N_RUNNERS_TASK_TIMEOUT": "30",
-        "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "30",
-        "N8N_RUNNERS_MAX_CONCURRENCY": "2"
-      }
-    }
-  ]
-}
-```
+For an example, refer to the [config file](https://github.com/n8n-io/n8n/blob/master/docker/images/runners/n8n-task-runners.json) used in the [`n8nio/runners`](https://hub.docker.com/r/n8nio/runners) Docker image.
+
 
 | Property       | Description                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -95,8 +56,8 @@ Example config file at `/etc/n8n-task-runners.json`:
 | `command`       | Command to start the task runner.                                                                                       |
 | `args`          | Args and flags to use with `command`.                                                                                           |
 | `health-check-server-port` | Port for the runner's health check server. When a single runner is configured, this is optional and defaults to `5681`. When multiple runners are configured, this is required and must be unique per runner.
-| `allowed-env`   | Env vars that the launcher will pass through from its own environment to the runner. See [environment](environment.md). |
-| `env-overrides` | Env vars that the launcher will set directly on the runner. See [environment](environment.md).                          |
+| `allowed-env`   | Env vars that the launcher will pass through from its own environment to the runner. See [environment variables](#environment-variables).
+| `env-overrides` | Env vars that the launcher will set directly on the runner. See [environment variables](#environment-variables).
 
 ## Environment variables
 

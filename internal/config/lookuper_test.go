@@ -15,7 +15,7 @@ func TestFileLookuper(t *testing.T) {
 	tests := []struct {
 		name          string
 		envVars       map[string]string
-		fileContent   map[string]string // filename -> content
+		fileContent   map[string]string // filepath -> content
 		lookupKey     string
 		expectedValue string
 		expectedFound bool

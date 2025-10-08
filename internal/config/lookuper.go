@@ -15,9 +15,9 @@ func NewLauncherLookuper(baseLookuper envconfig.Lookuper) *LauncherLookuper {
 	return &LauncherLookuper{baseLookuper: baseLookuper}
 }
 
-func (f *LauncherLookuper) Lookup(key string) (string, bool) {
+func (l *LauncherLookuper) Lookup(key string) (string, bool) {
 	fileKey := key + "_FILE"
-	if filePath, ok := f.baseLookuper.Lookup(fileKey); ok {
+	if filePath, ok := l.baseLookuper.Lookup(fileKey); ok {
 		// #nosec G304 -- filePath is controlled by system administrator via environment variable
 		content, err := os.ReadFile(filePath)
 		if err != nil {
@@ -27,5 +27,5 @@ func (f *LauncherLookuper) Lookup(key string) (string, bool) {
 		return strings.TrimRight(string(content), "\n\r"), true
 	}
 
-	return f.baseLookuper.Lookup(key)
+	return l.baseLookuper.Lookup(key)
 }

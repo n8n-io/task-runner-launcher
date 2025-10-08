@@ -94,13 +94,13 @@ type RunnerConfig struct {
 
 // LoadLauncherConfig loads the launcher's base config from the launcher's environment and
 // loads runner configs from the config file specified by N8N_RUNNERS_CONFIG_PATH.
-func LoadLauncherConfig(runnerTypes []string, lookuper envconfig.Lookuper) (*LauncherConfig, error) {
+func LoadLauncherConfig(runnerTypes []string, baseLookuper envconfig.Lookuper) (*LauncherConfig, error) {
 	ctx := context.Background()
 
 	var baseConfig BaseConfig
 	if err := envconfig.ProcessWith(ctx, &envconfig.Config{
 		Target:   &baseConfig,
-		Lookuper: lookuper,
+		Lookuper: NewLauncherLookuper(baseLookuper),
 	}); err != nil {
 		return nil, err
 	}

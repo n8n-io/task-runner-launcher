@@ -47,7 +47,7 @@ sequenceDiagram
     TR->>TB: runner:info
     TB-->>TR: broker:runner-registered
     TR->>TB: runner:task-offer
-    TB-->>L: broker:task-offer-accept
+    TB-->>TR: broker:task-offer-accept
     TB-->>TM: broker:task-ready
 
     %% Task settings flow

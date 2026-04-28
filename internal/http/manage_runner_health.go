@@ -2,8 +2,10 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"sync"
 	"task-runner-launcher/internal/logs"
@@ -129,6 +131,14 @@ func ManageRunnerHealth(
 		case StatusUnhealthy:
 			logger.Warn("Found runner unresponsive too many times, terminating runner...")
 			if err := cmd.Process.Kill(); err != nil {
+				// The runner process may have already exited on its own
+				// (e.g. OOM-killed by the kernel) between the health check
+				// failing and this Kill call. Treat that as success since the
+				// goal of Kill — the process no longer running — is satisfied.
+				if errors.Is(err, os.ErrProcessDone) {
+					logger.Info("Runner process had already exited before termination; no signal sent")
+					break
+				}
 				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 			}
 		case StatusMonitoringCancelled:

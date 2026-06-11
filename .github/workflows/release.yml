@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4.2.2
     
-      - uses: wangyoucao577/go-release-action@v1.52
+      - uses: wangyoucao577/go-release-action@2aa2977ad6a4534f9179e22bd0ff146a1e1d3466 # v1.52
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}

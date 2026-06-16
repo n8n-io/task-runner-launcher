@@ -2,17 +2,107 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeBroker stands in for the task broker: it answers the readiness and grant-token
+// HTTP endpoints and completes the websocket handshake (accepting the launcher's offer).
+func fakeBroker(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			var msg map[string]any
+			_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
+			_ = conn.ReadJSON(&msg) // runner:info
+			_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
+			_ = conn.ReadJSON(&msg) // runner:taskoffer
+			_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
+			_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+		}
+	}))
+}
+
+func TestExecuteLaunchesRunnerThenStopsOnShutdown(t *testing.T) {
+	// os.Chdir is process-global; restore it so other tests aren't affected.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "runner-started")
+	script := filepath.Join(dir, "runner.sh")
+	require.NoError(t, os.WriteFile(script,
+		[]byte("#!/bin/sh\ntrap 'exit 0' TERM\necho up > "+marker+"\nwhile true; do sleep 0.05; done\n"),
+		0o600))
+
+	srv := fakeBroker(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               dir,
+				Command:               "/bin/sh",
+				Args:                  []string{script},
+				HealthCheckServerPort: "5681",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	// The launcher completes the handshake and launches the runner (which writes the marker).
+	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
+		8*time.Second, 50*time.Millisecond, "launcher should have launched the runner")
+
+	// Shutdown: the launcher forwards SIGTERM to the runner, it drains, and the loop stops.
+	cancel()
+	select {
+	case execErr := <-done:
+		assert.NoError(t, execErr, "Execute should stop cleanly on shutdown")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+}
 
 func TestConfigureRunnerShutdownForwardsSigterm(t *testing.T) {
 	// Stub runner that traps SIGTERM, records it, and exits cleanly — the graceful

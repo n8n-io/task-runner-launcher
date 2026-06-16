@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"task-runner-launcher/internal/commands"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/errorreporting"
@@ -39,6 +42,13 @@ func main() {
 
 	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
+	// On SIGTERM/SIGINT (e.g. a k8s pod redeploy sending SIGTERM to the launcher as
+	// the sidecar's PID 1), cancel this context. Each launch goroutine forwards the
+	// signal to its runner child and waits for the runner to drain its in-flight task
+	// before exiting, so the runner is not torn down mid-execution.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	var wg sync.WaitGroup
 
 	for _, runnerType := range runnerTypes {
@@ -51,7 +61,7 @@ func main() {
 			logger := logs.NewLogger(logLevel, logPrefix)
 
 			cmd := commands.NewLaunchCommand(logger)
-			if err := cmd.Execute(launcherConfig, rt); err != nil {
+			if err := cmd.Execute(ctx, launcherConfig, rt); err != nil {
 				logger.Errorf("Failed to execute `launch` command: %v", err)
 			}
 		}(runnerType)

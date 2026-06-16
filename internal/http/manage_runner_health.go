@@ -132,7 +132,9 @@ func ManageRunnerHealth(
 				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 			}
 		case StatusMonitoringCancelled:
-			// On cancellation via context, CommandContext will terminate the process, so no action.
+			// On cancellation via context, the launch loop's cmd.Cancel forwards SIGTERM
+			// to the runner and cmd.WaitDelay bounds the wait before a force-kill, so no
+			// action is needed here.
 		}
 	}()
 }

@@ -1,12 +1,14 @@
 package ws
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net/url"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -107,7 +109,7 @@ func isWsCloseError(err error) bool {
 // registers, sends a non-expiring task offer, and receives the accept for that
 // offer. Note that the handshake completes only once this task offer is accepted,
 // which may take time.
-func Handshake(cfg HandshakeConfig, logger *logs.Logger) error {
+func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gracePeriod time.Duration) error {
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("received invalid handshake config: %w", err)
 	}
@@ -125,7 +127,9 @@ func Handshake(cfg HandshakeConfig, logger *logs.Logger) error {
 		return err
 	}
 
-	errReceived := make(chan error)
+	// Buffered so the reader goroutine never blocks sending its final error when
+	// nobody is receiving (e.g. after a ctx-cancelled return), avoiding a leak.
+	errReceived := make(chan error, 1)
 	handshakeComplete := make(chan struct{})
 
 	go func() {
@@ -202,12 +206,28 @@ func Handshake(cfg HandshakeConfig, logger *logs.Logger) error {
 		}
 	}()
 
-	select {
-	case err := <-errReceived:
-		wsConn.Close()
-		return err
-	case <-handshakeComplete:
-		logger.Debug("Runner's task offer was accepted")
-		return nil
+	// On a shutdown signal, don't leave immediately: keep the offer alive so a task
+	// dispatched while the n8n instance drains can still be picked up and a runner
+	// launched to serve it. Give up only on grace expiry, the broker closing the
+	// connection (via errReceived), or the offer being accepted.
+	ctxDone := ctx.Done()
+	var graceExpired <-chan time.Time
+
+	for {
+		select {
+		case err := <-errReceived:
+			wsConn.Close()
+			return err
+		case <-handshakeComplete:
+			logger.Debug("Runner's task offer was accepted")
+			return nil
+		case <-ctxDone:
+			logger.Info("Shutdown signalled; staying available until a task is dispatched, the broker drains, or the grace period ends")
+			ctxDone = nil // stop re-selecting on the (now-closed) ctx channel
+			graceExpired = time.After(gracePeriod)
+		case <-graceExpired:
+			wsConn.Close()
+			return errs.ErrShutdownRequested
+		}
 	}
 }

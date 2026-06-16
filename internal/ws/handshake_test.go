@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -145,7 +146,7 @@ func TestHandshake(t *testing.T) {
 			}
 
 			logger := logs.NewLogger(logs.InfoLevel, "")
-			err := Handshake(tt.config, logger)
+			err := Handshake(context.Background(), tt.config, logger, 30*time.Second)
 
 			if tt.expectedError != "" {
 				assert.Error(t, err)
@@ -222,11 +223,11 @@ func TestHandshakeTimeout(t *testing.T) {
 	done := make(chan error)
 	go func() {
 		logger := logs.NewLogger(logs.InfoLevel, "")
-		done <- Handshake(HandshakeConfig{
+		done <- Handshake(context.Background(), HandshakeConfig{
 			TaskType:            "javascript",
 			TaskBrokerServerURI: "http://" + srv.Listener.Addr().String(),
 			GrantToken:          "test-token",
-		}, logger)
+		}, logger, 30*time.Second)
 	}()
 
 	select {
@@ -234,5 +235,59 @@ func TestHandshakeTimeout(t *testing.T) {
 		assert.Error(t, err, "Expected timeout error")
 	case <-time.After(200 * time.Millisecond):
 		t.Error("Test timed out")
+	}
+}
+
+func TestHandshakeStaysAvailableThenStopsOnGraceExpiry(t *testing.T) {
+	// Server completes registration but never accepts the offer, so the launcher parks
+	// waiting — the state an idle launcher sidecar is in when a pod redeploy hits.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		require.NoError(t, err, "Failed to upgrade connection")
+		defer conn.Close()
+
+		require.NoError(t, conn.WriteJSON(message{Type: msgBrokerInfoRequest}))
+		var msg message
+		require.NoError(t, conn.ReadJSON(&msg), "Failed to read `runner:info`")
+		require.NoError(t, conn.WriteJSON(message{Type: msgBrokerRunnerRegistered}))
+
+		time.Sleep(2 * time.Second) // never send `broker:taskofferaccept`
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	const grace = 300 * time.Millisecond
+	done := make(chan error)
+	start := make(chan struct{})
+	go func() {
+		logger := logs.NewLogger(logs.InfoLevel, "")
+		close(start)
+		done <- Handshake(ctx, HandshakeConfig{
+			TaskType:            "javascript",
+			TaskBrokerServerURI: "http://" + srv.Listener.Addr().String(),
+			GrantToken:          "test-token",
+		}, logger, grace)
+	}()
+
+	<-start
+	// Simulate SIGTERM arriving while the launcher waits for its offer to be accepted.
+	// The launcher should NOT leave immediately — it stays available (so a task dispatched
+	// during the instance's drain can still be served) until the grace period elapses.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	// Must still be waiting right after cancellation (within the grace window).
+	select {
+	case <-done:
+		t.Fatal("Handshake returned immediately on cancellation; it should stay available during the grace period")
+	case <-time.After(grace / 2):
+	}
+
+	// Once the grace period elapses with no task, it stops cleanly.
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, errs.ErrShutdownRequested, "Handshake should stop with ErrShutdownRequested after grace")
+	case <-time.After(2 * time.Second):
+		t.Error("Handshake did not return after the grace period elapsed")
 	}
 }

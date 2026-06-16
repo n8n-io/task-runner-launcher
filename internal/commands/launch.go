@@ -164,7 +164,10 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.ManageRunnerHealth(runCtx, cmd, runnerServerURI, &wg, c.logger)
+		// Not `go`: ManageRunnerHealth returns immediately after spawning its own
+		// goroutines, and calling it synchronously ensures its wg.Add happens before
+		// the wg.Wait below (avoids a WaitGroup add/wait race).
+		http.ManageRunnerHealth(runCtx, cmd, runnerServerURI, &wg, c.logger)
 
 		err = cmd.Wait()
 		switch {

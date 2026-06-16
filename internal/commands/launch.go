@@ -139,10 +139,9 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 		c.logger.Debugf("Command: %s", runnerConfig.Command)
 		c.logger.Debugf("Args: %v", runnerConfig.Args)
 
-		// Tie the runner to a context so cmd.Cancel can forward SIGTERM. If shutdown has
-		// already begun, the signal ctx is already cancelled — which would stop the process
-		// from even starting — so a runner launched now (to serve a task dispatched during
-		// the instance's drain) gets an independent, grace-bounded lifetime instead.
+		// Tie the runner to a context so cmd.Cancel can forward SIGTERM. When shutdown is
+		// already underway the signal ctx is cancelled, which would prevent the process
+		// from starting, so use an independent grace-bounded context instead.
 		var runCtx context.Context
 		var cancelHealthMonitor context.CancelFunc
 		if ctx.Err() != nil {

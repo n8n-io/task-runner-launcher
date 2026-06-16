@@ -206,10 +206,9 @@ func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gr
 		}
 	}()
 
-	// On a shutdown signal, don't leave immediately: keep the offer alive so a task
-	// dispatched while the n8n instance drains can still be picked up and a runner
-	// launched to serve it. Give up only on grace expiry, the broker closing the
-	// connection (via errReceived), or the offer being accepted.
+	// On a shutdown signal, keep the offer alive instead of returning: wait for the offer
+	// to be accepted, the broker to close the connection (via errReceived), or the grace
+	// period to elapse, whichever comes first.
 	ctxDone := ctx.Done()
 	var graceExpired <-chan time.Time
 

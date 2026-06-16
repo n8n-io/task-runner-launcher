@@ -20,9 +20,10 @@ func TestConfigureRunnerShutdownForwardsSigterm(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "received-signal")
 	script := filepath.Join(dir, "runner.sh")
+	// Run via `sh script` (no exec bit needed), so 0600 is enough.
 	require.NoError(t, os.WriteFile(script,
 		[]byte("#!/bin/sh\ntrap 'echo TERM > "+marker+"; exit 0' TERM\nwhile true; do sleep 0.05; done\n"),
-		0o755))
+		0o600))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -38,6 +39,7 @@ func TestConfigureRunnerShutdownForwardsSigterm(t *testing.T) {
 	// The runner is sent SIGTERM (not the default SIGKILL), drains, and exits 0 — which
 	// surfaces from Wait as context.Canceled (the "drained on shutdown" arm).
 	assert.ErrorIs(t, err, context.Canceled)
+	// #nosec G304 -- marker is a test-controlled temp path
 	data, readErr := os.ReadFile(marker)
 	require.NoError(t, readErr, "runner should have caught SIGTERM and written the marker")
 	assert.Contains(t, string(data), "TERM")
@@ -48,7 +50,7 @@ func TestConfigureRunnerShutdownForceKillsUnresponsiveRunner(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "runner.sh")
 	require.NoError(t, os.WriteFile(script,
-		[]byte("#!/bin/sh\ntrap '' TERM\nwhile true; do sleep 0.05; done\n"), 0o755))
+		[]byte("#!/bin/sh\ntrap '' TERM\nwhile true; do sleep 0.05; done\n"), 0o600))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

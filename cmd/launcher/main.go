@@ -42,10 +42,8 @@ func main() {
 
 	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
-	// On SIGTERM/SIGINT (e.g. a k8s pod redeploy sending SIGTERM to the launcher as
-	// the sidecar's PID 1), cancel this context. Each launch goroutine forwards the
-	// signal to its runner child and waits for the runner to drain its in-flight task
-	// before exiting, so the runner is not torn down mid-execution.
+	// Cancelled on SIGTERM/SIGINT; each launch goroutine forwards the signal to its
+	// runner and waits for the runner to exit before returning.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

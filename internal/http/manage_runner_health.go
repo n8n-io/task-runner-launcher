@@ -19,9 +19,10 @@ var (
 	// sends a health check request to the runner.
 	healthCheckInterval = 10 * time.Second
 
-	// healthCheckMaxFailures is the max unresponsive checks before the launcher kills the
-	// runner. The resulting ceiling (initialDelay + maxFailures*interval ≈ 63s) should stay
-	// above the launcher shutdown timeout, so a draining runner isn't killed as unresponsive.
+	// healthCheckMaxFailures is the max consecutive unresponsive checks before the launcher
+	// kills the runner. This is a liveness watchdog for normal operation only: on shutdown
+	// the monitor's context is cancelled (StatusMonitoringCancelled), so it never kills a
+	// draining runner regardless of how the grace period is tuned.
 	healthCheckMaxFailures = 6
 
 	// initialDelay is the time (in seconds) to wait before sending the first

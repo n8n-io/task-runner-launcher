@@ -18,9 +18,11 @@ import (
 	"time"
 )
 
-// runnerGraceBufferSeconds is how much longer than the runner's grace period the
-// launcher waits before force-killing it, leaving room for the runner's own force-exit
-// backstop and connection close so the launcher never SIGKILLs a still-draining runner.
+// runnerGraceBufferSeconds is added to the runner's grace period to get the launcher's
+// force-kill delay. It must stay larger than the runner's own force-exit backstop —
+// grace + 10s, in start.ts of packages/@n8n/task-runner — so the runner exits itself
+// before the launcher SIGKILLs a still-draining runner. The extra 10s is margin; if that
+// backstop changes, change this too.
 const runnerGraceBufferSeconds = 20
 
 // defaultRunnerGraceSeconds mirrors N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT's default in

@@ -20,7 +20,11 @@ var (
 	healthCheckInterval = 10 * time.Second
 
 	// healthCheckMaxFailures is the max number of times a runner can be found
-	// unresponsive before the launcher terminates the runner.
+	// unresponsive before the launcher terminates the runner. The resulting unhealthy
+	// ceiling (initialDelay + healthCheckMaxFailures*healthCheckInterval ≈ 63s) should
+	// stay above the launcher's shutdown timeout, so a runner draining on shutdown is not
+	// force-killed as "unresponsive". (During a normal-mode shutdown the monitor's context
+	// is cancelled first, so this only matters for a runner launched mid-shutdown.)
 	healthCheckMaxFailures = 6
 
 	// initialDelay is the time (in seconds) to wait before sending the first

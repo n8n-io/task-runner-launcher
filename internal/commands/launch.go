@@ -18,30 +18,36 @@ import (
 	"time"
 )
 
-// runnerGraceBufferSeconds extends the runner grace to get the launcher's force-kill
-// delay. It must exceed the runner's own force-exit backstop (grace + 10s, in start.ts of
-// packages/@n8n/task-runner) so the runner exits first; change both together.
-const runnerGraceBufferSeconds = 20
+// Defaults mirror N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT and
+// N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN in packages/@n8n/task-runner
+// (base-runner-config.ts) — keep in sync.
+const (
+	defaultRunnerGraceSeconds     = 30
+	defaultForceKillMarginSeconds = 10
+)
 
-// defaultRunnerGraceSeconds mirrors N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT's default in
-// packages/@n8n/task-runner (base-runner-config.ts) — keep in sync.
-const defaultRunnerGraceSeconds = 30
+// positiveEnvSeconds reads a positive integer from env, falling back to def.
+func positiveEnvSeconds(name string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(name)); err == nil && v > 0 {
+		return v
+	}
+	return def
+}
 
 // launcherShutdownTimeout is how long the launcher waits for the runner to drain after
-// forwarding SIGTERM, before force-killing it. It is derived from the runner's grace
-// period (N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT) plus a buffer so the two cannot drift;
-// N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT overrides it outright.
+// forwarding SIGTERM, before force-killing it. The runner force-exits itself at
+// grace + margin, so the launcher waits one further margin (grace + 2 × margin) to let
+// that self-exit happen first. Both values come from the runner's own env so the two
+// processes can't drift; N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT overrides it outright.
 func launcherShutdownTimeout() time.Duration {
 	if v, err := strconv.Atoi(os.Getenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT")); err == nil && v > 0 {
 		return time.Duration(v) * time.Second
 	}
 
-	runnerGrace := defaultRunnerGraceSeconds
-	if v, err := strconv.Atoi(os.Getenv("N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT")); err == nil && v > 0 {
-		runnerGrace = v
-	}
+	grace := positiveEnvSeconds("N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT", defaultRunnerGraceSeconds)
+	margin := positiveEnvSeconds("N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN", defaultForceKillMarginSeconds)
 
-	return time.Duration(runnerGrace+runnerGraceBufferSeconds) * time.Second
+	return time.Duration(grace+2*margin) * time.Second
 }
 
 type Command interface {

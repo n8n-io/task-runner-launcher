@@ -190,13 +190,20 @@ func TestExecuteStopsOnCancelledContext(t *testing.T) {
 }
 
 func TestLauncherShutdownTimeout(t *testing.T) {
-	t.Run("defaults to runner grace + buffer when unset", func(t *testing.T) {
-		assert.Equal(t, time.Duration(defaultRunnerGraceSeconds+runnerGraceBufferSeconds)*time.Second, launcherShutdownTimeout())
+	defaultTimeout := time.Duration(defaultRunnerGraceSeconds+2*defaultForceKillMarginSeconds) * time.Second
+
+	t.Run("defaults to runner grace + 2x margin when unset", func(t *testing.T) {
+		assert.Equal(t, defaultTimeout, launcherShutdownTimeout())
 	})
 
 	t.Run("derives from the runner grace period so the two cannot drift", func(t *testing.T) {
 		t.Setenv("N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT", "60")
-		assert.Equal(t, time.Duration(60+runnerGraceBufferSeconds)*time.Second, launcherShutdownTimeout())
+		assert.Equal(t, time.Duration(60+2*defaultForceKillMarginSeconds)*time.Second, launcherShutdownTimeout())
+	})
+
+	t.Run("derives from the force-kill margin so the two cannot drift", func(t *testing.T) {
+		t.Setenv("N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN", "20")
+		assert.Equal(t, time.Duration(defaultRunnerGraceSeconds+2*20)*time.Second, launcherShutdownTimeout())
 	})
 
 	t.Run("honours an explicit launcher override", func(t *testing.T) {
@@ -207,6 +214,6 @@ func TestLauncherShutdownTimeout(t *testing.T) {
 
 	t.Run("falls back to the runner-derived default on invalid input", func(t *testing.T) {
 		t.Setenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT", "not-a-number")
-		assert.Equal(t, time.Duration(defaultRunnerGraceSeconds+runnerGraceBufferSeconds)*time.Second, launcherShutdownTimeout())
+		assert.Equal(t, defaultTimeout, launcherShutdownTimeout())
 	})
 }

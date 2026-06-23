@@ -77,8 +77,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 	runnerWaitDelay := launcherShutdownTimeout()
 
 	for {
-		// 0. stop relaunching once a shutdown signal has been received
-
+		// Stop relaunching once a shutdown signal has been received.
 		if ctx.Err() != nil {
 			c.logger.Info("Received shutdown signal, launcher will stop")
 			return nil

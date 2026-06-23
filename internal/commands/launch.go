@@ -18,11 +18,9 @@ import (
 	"time"
 )
 
-// runnerGraceBufferSeconds is added to the runner's grace period to get the launcher's
-// force-kill delay. It must stay larger than the runner's own force-exit backstop —
-// grace + 10s, in start.ts of packages/@n8n/task-runner — so the runner exits itself
-// before the launcher SIGKILLs a still-draining runner. The extra 10s is margin; if that
-// backstop changes, change this too.
+// runnerGraceBufferSeconds extends the runner grace to get the launcher's force-kill
+// delay. It must exceed the runner's own force-exit backstop (grace + 10s, in start.ts of
+// packages/@n8n/task-runner) so the runner exits first; change both together.
 const runnerGraceBufferSeconds = 20
 
 // defaultRunnerGraceSeconds mirrors N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT's default in
@@ -58,10 +56,8 @@ func NewLaunchCommand(logger *logs.Logger) *LaunchCommand {
 	return &LaunchCommand{logger: logger}
 }
 
-// configureRunnerShutdown wires graceful shutdown onto the runner command: when its
-// context is cancelled (shutdown signal or health monitor), forward SIGTERM so the
-// runner can drain its in-flight task, bounded by waitDelay before the runtime
-// force-kills it with SIGKILL.
+// configureRunnerShutdown forwards SIGTERM to the runner when its context is cancelled so
+// it can drain, then force-kills it after waitDelay.
 func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *logs.Logger) {
 	cmd.Cancel = func() error {
 		logger.Info("Forwarding shutdown signal to runner, waiting for it to drain...")

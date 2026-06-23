@@ -71,7 +71,7 @@ On `SIGTERM`/`SIGINT` the launcher forwards the signal to the runner so it can f
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT` | `50` | Seconds the launcher waits for the runner to drain and exit before force-killing it. |
+| `N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT` | runner grace + 20 (= `50`) | Seconds the launcher waits for the runner to drain and exit before force-killing it. Derived from the runner's `N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT` plus a buffer, so raising the runner's grace raises this automatically; set it to override. |
 
 Ensure your orchestrator's termination grace period (e.g. k8s `terminationGracePeriodSeconds`) is at least as large as this value, so the runner is not killed before it can drain.
 

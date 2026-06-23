@@ -18,16 +18,30 @@ import (
 	"time"
 )
 
-// launcherShutdownTimeout is how long the launcher waits for the runner to drain its
-// in-flight task after forwarding SIGTERM, before force-killing it. The default covers
-// the runner's default grace period plus its own force-exit backstop and connection
-// close; override with N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT (seconds).
+// runnerGraceBufferSeconds is how much longer than the runner's grace period the
+// launcher waits before force-killing it, leaving room for the runner's own force-exit
+// backstop and connection close so the launcher never SIGKILLs a still-draining runner.
+const runnerGraceBufferSeconds = 20
+
+// defaultRunnerGraceSeconds mirrors N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT's default in
+// packages/@n8n/task-runner (base-runner-config.ts) — keep in sync.
+const defaultRunnerGraceSeconds = 30
+
+// launcherShutdownTimeout is how long the launcher waits for the runner to drain after
+// forwarding SIGTERM, before force-killing it. It is derived from the runner's grace
+// period (N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT) plus a buffer so the two cannot drift;
+// N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT overrides it outright.
 func launcherShutdownTimeout() time.Duration {
-	const defaultSeconds = 50
 	if v, err := strconv.Atoi(os.Getenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT")); err == nil && v > 0 {
 		return time.Duration(v) * time.Second
 	}
-	return defaultSeconds * time.Second
+
+	runnerGrace := defaultRunnerGraceSeconds
+	if v, err := strconv.Atoi(os.Getenv("N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT")); err == nil && v > 0 {
+		runnerGrace = v
+	}
+
+	return time.Duration(runnerGrace+runnerGraceBufferSeconds) * time.Second
 }
 
 type Command interface {

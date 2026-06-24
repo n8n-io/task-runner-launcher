@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"task-runner-launcher/internal/commands"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/errorreporting"
@@ -39,6 +42,11 @@ func main() {
 
 	http.InitHealthCheckServer(launcherConfig.BaseConfig.HealthCheckServerPort)
 
+	// Cancelled on SIGTERM/SIGINT; each launch goroutine forwards the signal to its
+	// runner and waits for the runner to exit before returning.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	var wg sync.WaitGroup
 
 	for _, runnerType := range runnerTypes {
@@ -51,7 +59,7 @@ func main() {
 			logger := logs.NewLogger(logLevel, logPrefix)
 
 			cmd := commands.NewLaunchCommand(logger)
-			if err := cmd.Execute(launcherConfig, rt); err != nil {
+			if err := cmd.Execute(ctx, launcherConfig, rt); err != nil {
 				logger.Errorf("Failed to execute `launch` command: %v", err)
 			}
 		}(runnerType)

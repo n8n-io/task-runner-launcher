@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
+	"syscall"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/env"
 	"task-runner-launcher/internal/errs"
@@ -15,6 +17,38 @@ import (
 	"task-runner-launcher/internal/ws"
 	"time"
 )
+
+// Defaults mirror N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT and
+// N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN in packages/@n8n/task-runner
+// (base-runner-config.ts) — keep in sync.
+const (
+	defaultRunnerGraceSeconds     = 30
+	defaultForceKillMarginSeconds = 10
+)
+
+// positiveEnvSeconds reads a positive integer from env, falling back to def.
+func positiveEnvSeconds(name string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(name)); err == nil && v > 0 {
+		return v
+	}
+	return def
+}
+
+// launcherShutdownTimeout is how long the launcher waits for the runner to drain after
+// forwarding SIGTERM, before force-killing it. The runner force-exits itself at
+// grace + margin, so the launcher waits one further margin (grace + 2 × margin) to let
+// that self-exit happen first. Both values come from the runner's own env so the two
+// processes can't drift; N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT overrides it outright.
+func launcherShutdownTimeout() time.Duration {
+	if v, err := strconv.Atoi(os.Getenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT")); err == nil && v > 0 {
+		return time.Duration(v) * time.Second
+	}
+
+	grace := positiveEnvSeconds("N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT", defaultRunnerGraceSeconds)
+	margin := positiveEnvSeconds("N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN", defaultForceKillMarginSeconds)
+
+	return time.Duration(grace+2*margin) * time.Second
+}
 
 type Command interface {
 	Execute() error
@@ -28,7 +62,17 @@ func NewLaunchCommand(logger *logs.Logger) *LaunchCommand {
 	return &LaunchCommand{logger: logger}
 }
 
-func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerType string) error {
+// configureRunnerShutdown forwards SIGTERM to the runner when its context is cancelled so
+// it can drain, then force-kills it after waitDelay.
+func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *logs.Logger) {
+	cmd.Cancel = func() error {
+		logger.Info("Forwarding shutdown signal to runner, waiting for it to drain...")
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
+	cmd.WaitDelay = waitDelay
+}
+
+func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.LauncherConfig, runnerType string) error {
 	c.logger.Info("Starting launcher goroutine...")
 
 	baseConfig := launcherConfig.BaseConfig
@@ -47,7 +91,16 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 	runnerEnv := env.PrepareRunnerEnv(baseConfig, runnerConfig, c.logger)
 	runnerServerURI := fmt.Sprintf("http://%s:%s", baseConfig.RunnerHealthCheckServerHost, runnerConfig.HealthCheckServerPort)
 
+	// Constant for the launcher's lifetime, so compute once.
+	runnerWaitDelay := launcherShutdownTimeout()
+
 	for {
+		// Stop relaunching once a shutdown signal has been received.
+		if ctx.Err() != nil {
+			c.logger.Info("Received shutdown signal, launcher will stop")
+			return nil
+		}
+
 		// 3. check until task broker is ready
 
 		if err := http.CheckUntilBrokerReady(baseConfig.TaskBrokerURI, c.logger); err != nil {
@@ -71,8 +124,13 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 			GrantToken:          launcherGrantToken,
 		}
 
-		err = ws.Handshake(handshakeCfg, c.logger)
+		err = ws.Handshake(ctx, handshakeCfg, c.logger, runnerWaitDelay)
 		switch {
+		case errors.Is(err, errs.ErrShutdownRequested):
+			// Shutdown signalled and the grace period elapsed without a task to serve —
+			// exit cleanly without relaunching.
+			c.logger.Info("Received shutdown signal, launcher will stop")
+			return nil
 		case errors.Is(err, errs.ErrServerDown):
 			c.logger.Warn("Task broker is down, launcher will try to reconnect...")
 			time.Sleep(time.Second * 5)
@@ -98,29 +156,47 @@ func (c *LaunchCommand) Execute(launcherConfig *config.LauncherConfig, runnerTyp
 		c.logger.Debugf("Command: %s", runnerConfig.Command)
 		c.logger.Debugf("Args: %v", runnerConfig.Args)
 
-		ctx, cancelHealthMonitor := context.WithCancel(context.Background())
+		// Tie the runner to a context so cmd.Cancel can forward SIGTERM. When shutdown is
+		// already underway the signal ctx is cancelled, which would prevent the process
+		// from starting, so use an independent grace-bounded context instead.
+		var runCtx context.Context
+		var cancelHealthMonitor context.CancelFunc
+		if ctx.Err() != nil {
+			runCtx, cancelHealthMonitor = context.WithTimeout(context.Background(), runnerWaitDelay)
+		} else {
+			runCtx, cancelHealthMonitor = context.WithCancel(ctx)
+		}
 		var wg sync.WaitGroup
 
-		cmd := exec.CommandContext(ctx, runnerConfig.Command, runnerConfig.Args...)
+		cmd := exec.CommandContext(runCtx, runnerConfig.Command, runnerConfig.Args...)
 		cmd.Env = runnerEnv
 		runnerPrefix := logs.GetRunnerPrefix(runnerType)
 		logLevel := logs.ParseLevel(launcherConfig.BaseConfig.LogLevel)
 		cmd.Stdout, cmd.Stderr = logs.GetRunnerWriters(logLevel, runnerPrefix)
+
+		configureRunnerShutdown(cmd, runnerWaitDelay, c.logger)
 
 		if err := cmd.Start(); err != nil {
 			cancelHealthMonitor()
 			return fmt.Errorf("failed to start runner process: %w", err)
 		}
 
-		go http.ManageRunnerHealth(ctx, cmd, runnerServerURI, &wg, c.logger)
+		// Not `go`: ManageRunnerHealth returns immediately after spawning its own
+		// goroutines, and calling it synchronously ensures its wg.Add happens before
+		// the wg.Wait below (avoids a WaitGroup add/wait race).
+		http.ManageRunnerHealth(runCtx, cmd, runnerServerURI, &wg, c.logger)
 
 		err = cmd.Wait()
-		if err != nil && err.Error() == "signal: killed" {
-			c.logger.Warn("Unresponsive runner process was terminated")
-		} else if err != nil {
-			c.logger.Errorf("Runner process exited with error: %v", err)
-		} else {
+		switch {
+		case err == nil:
 			c.logger.Info("Runner process exited on idle timeout")
+		case errors.Is(err, context.Canceled):
+			// Cancel forwarded SIGTERM and the runner drained and exited as a result.
+			c.logger.Info("Runner process drained and exited on shutdown")
+		case err.Error() == "signal: killed":
+			c.logger.Warn("Unresponsive runner process was terminated")
+		default:
+			c.logger.Errorf("Runner process exited with error: %v", err)
 		}
 		cancelHealthMonitor()
 

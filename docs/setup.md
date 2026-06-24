@@ -65,6 +65,18 @@ It is required to pass `N8N_RUNNERS_AUTH_TOKEN` to the launcher and to the n8n i
 
 For any environment variable, you can append `_FILE` to specify a file path to read a value from. For example: `N8N_RUNNERS_AUTH_TOKEN_FILE=/path/to/auth-token.txt`
 
+### Graceful shutdown
+
+On `SIGTERM`/`SIGINT` the launcher forwards the signal to the runner so it can finish any in-flight task before exiting, then waits up to a grace period before force-killing it:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT` | runner grace + 2 x margin (= `50`) | Seconds the launcher waits for the runner to drain and exit before force-killing it. Derived as `N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT + 2 x N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN`, so raising either raises this automatically; set it to override. |
+
+The runner force-exits itself at `grace + margin`; the launcher waits one further margin (`grace + 2 x margin`) so that self-exit happens first. Set `N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN` (default `10`) on the runner's environment to tune the gap.
+
+Ensure your orchestrator's termination grace period (e.g. k8s `terminationGracePeriodSeconds`) is at least as large as this value, so the runner is not killed before it can drain.
+
 The launcher can pass env vars to task runners in two ways, as specified in the [config file](#config-file):
 
 | Source | Description | Purpose |

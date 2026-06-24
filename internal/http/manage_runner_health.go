@@ -19,8 +19,10 @@ var (
 	// sends a health check request to the runner.
 	healthCheckInterval = 10 * time.Second
 
-	// healthCheckMaxFailures is the max number of times a runner can be found
-	// unresponsive before the launcher terminates the runner.
+	// healthCheckMaxFailures is the max consecutive unresponsive checks before the launcher
+	// kills the runner. This is a liveness watchdog for normal operation only: on shutdown
+	// the monitor's context is cancelled (StatusMonitoringCancelled), so it never kills a
+	// draining runner regardless of how the grace period is tuned.
 	healthCheckMaxFailures = 6
 
 	// initialDelay is the time (in seconds) to wait before sending the first
@@ -132,7 +134,9 @@ func ManageRunnerHealth(
 				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 			}
 		case StatusMonitoringCancelled:
-			// On cancellation via context, CommandContext will terminate the process, so no action.
+			// On cancellation via context, the launch loop's cmd.Cancel forwards SIGTERM
+			// to the runner and cmd.WaitDelay bounds the wait before a force-kill, so no
+			// action is needed here.
 		}
 	}()
 }

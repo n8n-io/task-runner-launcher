@@ -6,6 +6,10 @@ var (
 	// ErrServerDown is returned when the task broker server is down.
 	ErrServerDown = errors.New("task broker server is down")
 
+	// ErrShutdownRequested is returned by the handshake when a shutdown signal was
+	// received and the grace period elapsed without a task being dispatched.
+	ErrShutdownRequested = errors.New("shutdown requested")
+
 	// ErrWsMsgTooLarge is returned when the websocket message is too large for
 	// the launcher's websocket buffer.
 	ErrWsMsgTooLarge = errors.New("websocket message too large for buffer - please increase buffer size")

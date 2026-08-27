@@ -6,10 +6,8 @@ var (
 	// ErrServerDown is returned when the task broker server is down.
 	ErrServerDown = errors.New("task broker server is down")
 
-	// ErrDialFailed is returned when the initial websocket dial to the task broker
-	// fails before a connection is established (e.g. bad handshake, TLS error,
-	// connection refused) — distinct from ErrServerDown, which covers a close on an
-	// already-established connection.
+	// ErrDialFailed is returned when the websocket dial to the task broker fails
+	// before a connection is established (e.g. bad handshake, TLS error, connection refused).
 	ErrDialFailed = errors.New("websocket dial to task broker failed")
 
 	// ErrShutdownRequested is returned by the handshake when a shutdown signal was

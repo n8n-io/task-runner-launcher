@@ -21,6 +21,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// completeWsHandshake runs the broker side of the ws handshake: it accepts the launcher's
+// offer and lets it proceed to launch a runner.
+func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
+	t.Helper()
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	var msg map[string]any
+	_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
+	_ = conn.ReadJSON(&msg) // runner:info
+	_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
+	_ = conn.ReadJSON(&msg) // runner:taskoffer
+	_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
+	_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+}
+
 // fakeBroker stands in for the task broker: it answers the readiness and grant-token
 // HTTP endpoints and completes the websocket handshake (accepting the launcher's offer).
 func fakeBroker(t *testing.T) *httptest.Server {
@@ -34,18 +52,7 @@ func fakeBroker(t *testing.T) *httptest.Server {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
 		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
-			conn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				return
-			}
-			defer conn.Close()
-			var msg map[string]any
-			_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
-			_ = conn.ReadJSON(&msg) // runner:info
-			_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
-			_ = conn.ReadJSON(&msg) // runner:taskoffer
-			_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
-			_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+			completeWsHandshake(t, upgrader, w, r)
 		}
 	}))
 }
@@ -68,18 +75,7 @@ func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 				w.WriteHeader(http.StatusBadRequest) // dial failure: rejected before upgrade
 				return
 			}
-			conn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				return
-			}
-			defer conn.Close()
-			var msg map[string]any
-			_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
-			_ = conn.ReadJSON(&msg) // runner:info
-			_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
-			_ = conn.ReadJSON(&msg) // runner:taskoffer
-			_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
-			_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+			completeWsHandshake(t, upgrader, w, r)
 		}
 	}))
 }
@@ -136,6 +132,50 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 		assert.NoError(t, execErr, "Execute should stop cleanly on shutdown")
 	case <-time.After(10 * time.Second):
 		t.Fatal("Execute did not return after shutdown")
+	}
+}
+
+func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
+	// A handshake error that is neither ErrServerDown nor ErrDialFailed (here: an
+	// empty runner type failing validateConfig) must still hit launch.go's
+	// default: return — narrow dial-failure retry must not swallow a genuinely
+	// broken config into an infinite retry loop.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBroker(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "", // triggers validateConfig's "runner type is missing"
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5683",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+		assert.Contains(t, execErr.Error(), "runner type is missing")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a non-retryable config error must not be retried")
 	}
 }
 

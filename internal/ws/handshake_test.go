@@ -177,7 +177,7 @@ func TestHandshake(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			if tt.name == "dial fails before upgrade" {
+			if tt.rejectUpgrade {
 				assert.ErrorIs(t, err, errs.ErrDialFailed, "dial failure should be classified as ErrDialFailed")
 			}
 		})

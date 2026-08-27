@@ -155,6 +155,17 @@ func TestHandshake(t *testing.T) {
 			expectedErrIs:       errs.ErrDialFailed,
 		},
 		{
+			name: "dial rejected: bad gateway from proxy (retryable)",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			rejectUpgradeStatus: http.StatusBadGateway,
+			expectedError:       errs.ErrDialFailed.Error(),
+			expectedErrIs:       errs.ErrDialFailed,
+		},
+		{
 			name: "dial rejected: rate limited (retryable)",
 			config: HandshakeConfig{
 				TaskType:            "javascript",

@@ -99,14 +99,18 @@ func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) 
 }
 
 // isRetryableDialError: nil resp is a network-level failure (retryable). A rejected
-// upgrade is retryable only for the broker's transient signals; 403 (expired grant
-// token) self-corrects since a fresh one is fetched every retry.
+// upgrade is retryable for any 5xx, since the broker or a proxy in front of it is
+// unhealthy, for 429, and for 403 (expired grant token), which self-corrects since a
+// fresh one is fetched every retry.
 func isRetryableDialError(resp *http.Response) bool {
 	if resp == nil {
 		return true
 	}
+	if resp.StatusCode >= 500 {
+		return true
+	}
 	switch resp.StatusCode {
-	case http.StatusTooManyRequests, http.StatusServiceUnavailable, http.StatusForbidden:
+	case http.StatusTooManyRequests, http.StatusForbidden:
 		return true
 	default:
 		return false

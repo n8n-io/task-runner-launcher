@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/logs"
 	"testing"
@@ -20,9 +21,213 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeBroker stands in for the task broker: it answers the readiness and grant-token
-// HTTP endpoints and completes the websocket handshake (accepting the launcher's offer).
+// completeWsHandshake accepts the launcher's offer so it proceeds to launch a runner.
+func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
+	t.Helper()
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	var msg map[string]any
+	_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
+	_ = conn.ReadJSON(&msg) // runner:info
+	_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
+	_ = conn.ReadJSON(&msg) // runner:taskoffer
+	_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
+	_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+}
+
+// fakeBroker answers the broker's HTTP and websocket endpoints normally.
 func fakeBroker(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			completeWsHandshake(t, upgrader, w, r)
+		}
+	}))
+}
+
+// fakeBrokerDialFailsOnce rejects the first upgrade attempt, then behaves like fakeBroker.
+func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	var wsAttempts int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			if atomic.AddInt32(&wsAttempts, 1) == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable) // dial failure: rejected before upgrade, retryable
+				return
+			}
+			completeWsHandshake(t, upgrader, w, r)
+		}
+	}))
+}
+
+// fakeBrokerRejectsDial rejects every upgrade with the given status (a standing
+// misconfiguration, not a blip).
+func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			w.WriteHeader(status)
+		}
+	}))
+}
+
+func TestExecuteReturnsOnPermanentDialRejection(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerRejectsDial(t, http.StatusUnauthorized)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5685",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a permanent dial rejection must not be retried")
+	}
+}
+
+func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
+	// os.Chdir is process-global; restore it so other tests aren't affected.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "runner-started")
+	script := filepath.Join(dir, "runner.sh")
+	require.NoError(t, os.WriteFile(script,
+		[]byte("#!/bin/sh\ntrap 'exit 0' TERM\necho up > "+marker+"\nwhile true; do sleep 0.05; done\n"),
+		0o600))
+
+	srv := fakeBrokerDialFailsOnce(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               dir,
+				Command:               "/bin/sh",
+				Args:                  []string{script},
+				HealthCheckServerPort: "5682",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
+		12*time.Second, 50*time.Millisecond, "launcher should retry past the dial failure and launch the runner")
+
+	cancel()
+	select {
+	case execErr := <-done:
+		assert.NoError(t, execErr, "Execute should stop cleanly on shutdown")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+}
+
+func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBroker(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "", // triggers validateConfig's "runner type is missing"
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5683",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+		assert.Contains(t, execErr.Error(), "runner type is missing")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a non-retryable config error must not be retried")
+	}
+}
+
+// fakeBrokerBadMessage upgrades successfully, then sends a malformed message.
+func fakeBrokerBadMessage(t *testing.T) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,15 +243,48 @@ func fakeBroker(t *testing.T) *httptest.Server {
 				return
 			}
 			defer conn.Close()
-			var msg map[string]any
-			_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
-			_ = conn.ReadJSON(&msg) // runner:info
-			_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
-			_ = conn.ReadJSON(&msg) // runner:taskoffer
-			_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
-			_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+			_ = conn.WriteMessage(websocket.TextMessage, []byte("not valid json"))
 		}
 	}))
+}
+
+func TestExecuteReturnsOnPostDialHandshakeError(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerBadMessage(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5684",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a post-dial handshake error must not be retried")
+	}
 }
 
 func TestExecuteLaunchesRunnerThenStopsOnShutdown(t *testing.T) {

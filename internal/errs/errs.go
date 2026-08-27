@@ -6,6 +6,9 @@ var (
 	// ErrServerDown is returned when the task broker server is down.
 	ErrServerDown = errors.New("task broker server is down")
 
+	// ErrDialFailed is returned for a retryable websocket dial failure to the task broker.
+	ErrDialFailed = errors.New("websocket dial to task broker failed")
+
 	// ErrShutdownRequested is returned by the handshake when a shutdown signal was
 	// received and the grace period elapsed without a task being dispatched.
 	ErrShutdownRequested = errors.New("shutdown requested")

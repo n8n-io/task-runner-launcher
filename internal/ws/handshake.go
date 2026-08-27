@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"net/url"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
@@ -84,14 +85,36 @@ func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) 
 		WriteBufferSize: 512,
 	}
 
-	wsConn, _, err := dialer.Dial(wsURL.String(), reqHeader)
+	wsConn, resp, err := dialer.Dial(wsURL.String(), reqHeader)
 	if err != nil {
+		if isRetryableDialError(resp) {
+			return nil, fmt.Errorf("%w: %w", errs.ErrDialFailed, err)
+		}
 		return nil, fmt.Errorf("websocket connection failed: %w", err)
 	}
 
 	logger.Debugf("Connected: %s", wsURL.String())
 
 	return wsConn, nil
+}
+
+// isRetryableDialError: nil resp is a network-level failure (retryable). A rejected
+// upgrade is retryable for any 5xx, since the broker or a proxy in front of it is
+// unhealthy, for 429, and for 403 (expired grant token), which self-corrects since a
+// fresh one is fetched every retry.
+func isRetryableDialError(resp *http.Response) bool {
+	if resp == nil {
+		return true
+	}
+	if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+		return true
+	}
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests, http.StatusForbidden:
+		return true
+	default:
+		return false
+	}
 }
 
 func randomID() string {

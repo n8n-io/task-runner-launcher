@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"net/url"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
@@ -84,14 +85,37 @@ func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) 
 		WriteBufferSize: 512,
 	}
 
-	wsConn, _, err := dialer.Dial(wsURL.String(), reqHeader)
+	wsConn, resp, err := dialer.Dial(wsURL.String(), reqHeader)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errs.ErrDialFailed, err)
+		if isRetryableDialError(resp) {
+			return nil, fmt.Errorf("%w: %w", errs.ErrDialFailed, err)
+		}
+		return nil, fmt.Errorf("websocket connection failed: %w", err)
 	}
 
 	logger.Debugf("Connected: %s", wsURL.String())
 
 	return wsConn, nil
+}
+
+// isRetryableDialError decides whether a dial failure is worth retrying. A nil
+// response means the failure happened before the broker ever answered (refused
+// connection, TLS error, timeout) — always transient. A rejected upgrade is
+// retryable only for the broker's own transient signals (rate-limited, not yet
+// ready) or an expired grant token, which self-corrects since the launcher fetches
+// a fresh one on every retry. Any other rejection (missing/malformed auth, wrong
+// path, an unexpected broker error) reflects a standing misconfiguration and must
+// not be retried silently forever.
+func isRetryableDialError(resp *http.Response) bool {
+	if resp == nil {
+		return true
+	}
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable, http.StatusForbidden:
+		return true
+	default:
+		return false
+	}
 }
 
 func randomID() string {

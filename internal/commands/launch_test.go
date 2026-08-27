@@ -72,12 +72,72 @@ func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
 		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
 			if atomic.AddInt32(&wsAttempts, 1) == 1 {
-				w.WriteHeader(http.StatusBadRequest) // dial failure: rejected before upgrade
+				w.WriteHeader(http.StatusServiceUnavailable) // dial failure: rejected before upgrade, retryable
 				return
 			}
 			completeWsHandshake(t, upgrader, w, r)
 		}
 	}))
+}
+
+// fakeBrokerRejectsDial rejects every websocket upgrade attempt with the given status,
+// as a broker would for a standing misconfiguration (bad auth, wrong path) rather than
+// a transient condition.
+func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			w.WriteHeader(status)
+		}
+	}))
+}
+
+func TestExecuteReturnsOnPermanentDialRejection(t *testing.T) {
+	// A dial rejection that isn't one of the broker's transient signals (here: 401,
+	// as if the launcher's auth token were wrong) must not be retried forever — it's
+	// a standing misconfiguration, not a blip.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerRejectsDial(t, http.StatusUnauthorized)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5685",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a permanent dial rejection must not be retried")
+	}
 }
 
 func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
@@ -137,9 +197,9 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 
 func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
 	// A handshake error that is neither ErrServerDown nor ErrDialFailed (here: an
-	// empty runner type failing validateConfig) must still hit launch.go's
-	// default: return — narrow dial-failure retry must not swallow a genuinely
-	// broken config into an infinite retry loop.
+	// empty runner type failing validateConfig, before any dial is attempted) must
+	// still return from Execute — narrow dial-failure retry must not swallow a
+	// genuinely broken config into an infinite retry loop.
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
@@ -176,6 +236,72 @@ func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
 		assert.Contains(t, execErr.Error(), "runner type is missing")
 	case <-time.After(5 * time.Second):
 		t.Fatal("Execute did not return promptly; a non-retryable config error must not be retried")
+	}
+}
+
+// fakeBrokerBadMessage behaves like fakeBroker, except it upgrades the websocket
+// connection successfully, then immediately sends a malformed message instead of
+// starting the handshake protocol.
+func fakeBrokerBadMessage(t *testing.T) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			_ = conn.WriteMessage(websocket.TextMessage, []byte("not valid json"))
+		}
+	}))
+}
+
+func TestExecuteReturnsOnPostDialHandshakeError(t *testing.T) {
+	// A handshake error surfacing after the dial succeeds (here: the broker sending
+	// an undecodable message) is neither ErrServerDown nor ErrDialFailed, so it must
+	// still return from Execute rather than retry.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerBadMessage(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5684",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case execErr := <-done:
+		assert.Error(t, execErr, "Execute should return an error instead of retrying forever")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return promptly; a post-dial handshake error must not be retried")
 	}
 }
 

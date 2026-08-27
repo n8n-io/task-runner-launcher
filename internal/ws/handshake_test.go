@@ -23,11 +23,12 @@ var upgrader = websocket.Upgrader{
 
 func TestHandshake(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        HandshakeConfig
-		handlerFunc   func(*testing.T, *websocket.Conn)
-		rejectUpgrade bool
-		expectedError string
+		name                string
+		config              HandshakeConfig
+		handlerFunc         func(*testing.T, *websocket.Conn)
+		rejectUpgradeStatus int // non-zero: reject the upgrade with this HTTP status instead of completing it
+		expectedError       string
+		expectedErrIs       error
 	}{
 		{
 			name: "successful handshake",
@@ -118,20 +119,64 @@ func TestHandshake(t *testing.T) {
 				conn.Close()
 			},
 			expectedError: errs.ErrServerDown.Error(),
+			expectedErrIs: errs.ErrServerDown,
 		},
 		{
-			name: "dial fails before upgrade",
+			// No handlerFunc: the test server below rejects the upgrade with this
+			// status, so dialer.Dial fails before the connection is ever
+			// established — distinct from "server closes connection", which fails
+			// during the read loop on an already-established connection.
+			name: "dial rejected: broker not ready (retryable)",
 			config: HandshakeConfig{
 				TaskType:            "javascript",
 				TaskBrokerServerURI: "http://localhost",
 				GrantToken:          "test-token",
 			},
-			// No handlerFunc: the test server below responds 400 to every request,
-			// so dialer.Dial fails before the connection is ever established —
-			// distinct from "server closes connection", which fails during the
-			// read loop on an already-established connection.
-			rejectUpgrade: true,
-			expectedError: errs.ErrDialFailed.Error(),
+			rejectUpgradeStatus: http.StatusServiceUnavailable,
+			expectedError:       errs.ErrDialFailed.Error(),
+			expectedErrIs:       errs.ErrDialFailed,
+		},
+		{
+			name: "dial rejected: rate limited (retryable)",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			rejectUpgradeStatus: http.StatusTooManyRequests,
+			expectedError:       errs.ErrDialFailed.Error(),
+			expectedErrIs:       errs.ErrDialFailed,
+		},
+		{
+			name: "dial rejected: expired grant token (retryable, self-corrects on refetch)",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			rejectUpgradeStatus: http.StatusForbidden,
+			expectedError:       errs.ErrDialFailed.Error(),
+			expectedErrIs:       errs.ErrDialFailed,
+		},
+		{
+			name: "dial rejected: malformed auth header (not retryable)",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			rejectUpgradeStatus: http.StatusUnauthorized,
+			expectedError:       "websocket connection failed",
+		},
+		{
+			name: "dial rejected: wrong path (not retryable)",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			rejectUpgradeStatus: http.StatusNotFound,
+			expectedError:       "websocket connection failed",
 		},
 	}
 
@@ -158,9 +203,9 @@ func TestHandshake(t *testing.T) {
 				defer server.Close()
 
 				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
-			} else if tt.rejectUpgrade {
+			} else if tt.rejectUpgradeStatus != 0 {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusBadRequest)
+					w.WriteHeader(tt.rejectUpgradeStatus)
 				}))
 				defer server.Close()
 
@@ -177,8 +222,12 @@ func TestHandshake(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			if tt.rejectUpgrade {
-				assert.ErrorIs(t, err, errs.ErrDialFailed, "dial failure should be classified as ErrDialFailed")
+			if tt.expectedErrIs != nil {
+				assert.ErrorIs(t, err, tt.expectedErrIs)
+			}
+
+			if tt.rejectUpgradeStatus != 0 && tt.expectedErrIs == nil {
+				assert.NotErrorIs(t, err, errs.ErrDialFailed, "this rejection status must not be retried")
 			}
 		})
 	}

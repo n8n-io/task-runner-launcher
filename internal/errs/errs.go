@@ -6,8 +6,11 @@ var (
 	// ErrServerDown is returned when the task broker server is down.
 	ErrServerDown = errors.New("task broker server is down")
 
-	// ErrDialFailed is returned when the websocket dial to the task broker fails
-	// before a connection is established (e.g. bad handshake, TLS error, connection refused).
+	// ErrDialFailed is returned for a retryable websocket dial failure to the task
+	// broker: no connection at all (TLS error, connection refused), or an upgrade
+	// rejection the broker itself signals as transient (rate-limited, not yet ready,
+	// expired grant token). A dial rejection for any other reason is not wrapped in
+	// this sentinel, since it signals a standing misconfiguration rather than a blip.
 	ErrDialFailed = errors.New("websocket dial to task broker failed")
 
 	// ErrShutdownRequested is returned by the handshake when a shutdown signal was

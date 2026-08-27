@@ -26,6 +26,7 @@ func TestHandshake(t *testing.T) {
 		name          string
 		config        HandshakeConfig
 		handlerFunc   func(*testing.T, *websocket.Conn)
+		rejectUpgrade bool
 		expectedError string
 	}{
 		{
@@ -118,6 +119,20 @@ func TestHandshake(t *testing.T) {
 			},
 			expectedError: errs.ErrServerDown.Error(),
 		},
+		{
+			name: "dial fails before upgrade",
+			config: HandshakeConfig{
+				TaskType:            "javascript",
+				TaskBrokerServerURI: "http://localhost",
+				GrantToken:          "test-token",
+			},
+			// No handlerFunc: the test server below responds 400 to every request,
+			// so dialer.Dial fails before the connection is ever established —
+			// distinct from "server closes connection", which fails during the
+			// read loop on an already-established connection.
+			rejectUpgrade: true,
+			expectedError: errs.ErrDialFailed.Error(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -143,6 +158,13 @@ func TestHandshake(t *testing.T) {
 				defer server.Close()
 
 				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
+			} else if tt.rejectUpgrade {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusBadRequest)
+				}))
+				defer server.Close()
+
+				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
 			}
 
 			logger := logs.NewLogger(logs.InfoLevel, "")
@@ -153,6 +175,10 @@ func TestHandshake(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
 				assert.NoError(t, err)
+			}
+
+			if tt.name == "dial fails before upgrade" {
+				assert.ErrorIs(t, err, errs.ErrDialFailed, "dial failure should be classified as ErrDialFailed")
 			}
 		})
 	}

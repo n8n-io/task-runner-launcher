@@ -21,8 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// completeWsHandshake runs the broker side of the ws handshake: it accepts the launcher's
-// offer and lets it proceed to launch a runner.
+// completeWsHandshake accepts the launcher's offer so it proceeds to launch a runner.
 func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
 	t.Helper()
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -39,8 +38,7 @@ func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.Respo
 	_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
 }
 
-// fakeBroker stands in for the task broker: it answers the readiness and grant-token
-// HTTP endpoints and completes the websocket handshake (accepting the launcher's offer).
+// fakeBroker answers the broker's HTTP and websocket endpoints normally.
 func fakeBroker(t *testing.T) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
@@ -57,8 +55,7 @@ func fakeBroker(t *testing.T) *httptest.Server {
 	}))
 }
 
-// fakeBrokerDialFailsOnce behaves like fakeBroker, except its websocket endpoint rejects
-// the upgrade (dial failure) on the first attempt, then completes the handshake normally.
+// fakeBrokerDialFailsOnce rejects the first upgrade attempt, then behaves like fakeBroker.
 func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
@@ -80,9 +77,8 @@ func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 	}))
 }
 
-// fakeBrokerRejectsDial rejects every websocket upgrade attempt with the given status,
-// as a broker would for a standing misconfiguration (bad auth, wrong path) rather than
-// a transient condition.
+// fakeBrokerRejectsDial rejects every upgrade with the given status (a standing
+// misconfiguration, not a blip).
 func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,9 +95,6 @@ func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
 }
 
 func TestExecuteReturnsOnPermanentDialRejection(t *testing.T) {
-	// A dial rejection that isn't one of the broker's transient signals (here: 401,
-	// as if the launcher's auth token were wrong) must not be retried forever — it's
-	// a standing misconfiguration, not a blip.
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
@@ -181,8 +174,6 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
 
-	// A dial failure on the first handshake attempt must NOT kill the goroutine — it
-	// should retry and still reach the runner launch, same as an ErrServerDown retry.
 	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
 		12*time.Second, 50*time.Millisecond, "launcher should retry past the dial failure and launch the runner")
 
@@ -196,10 +187,6 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 }
 
 func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
-	// A handshake error that is neither ErrServerDown nor ErrDialFailed (here: an
-	// empty runner type failing validateConfig, before any dial is attempted) must
-	// still return from Execute — narrow dial-failure retry must not swallow a
-	// genuinely broken config into an infinite retry loop.
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
@@ -239,9 +226,7 @@ func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
 	}
 }
 
-// fakeBrokerBadMessage behaves like fakeBroker, except it upgrades the websocket
-// connection successfully, then immediately sends a malformed message instead of
-// starting the handshake protocol.
+// fakeBrokerBadMessage upgrades successfully, then sends a malformed message.
 func fakeBrokerBadMessage(t *testing.T) *httptest.Server {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
@@ -264,9 +249,6 @@ func fakeBrokerBadMessage(t *testing.T) *httptest.Server {
 }
 
 func TestExecuteReturnsOnPostDialHandshakeError(t *testing.T) {
-	// A handshake error surfacing after the dial succeeds (here: the broker sending
-	// an undecodable message) is neither ErrServerDown nor ErrDialFailed, so it must
-	// still return from Execute rather than retry.
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()

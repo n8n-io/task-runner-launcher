@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,12 +22,23 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 512,
 }
 
+// closedPortAddr returns an address nothing listens on, to force a connection-refused error.
+func closedPortAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+	return addr
+}
+
 func TestHandshake(t *testing.T) {
 	tests := []struct {
 		name                string
 		config              HandshakeConfig
 		handlerFunc         func(*testing.T, *websocket.Conn)
-		rejectUpgradeStatus int // non-zero: reject the upgrade with this HTTP status instead of completing it
+		rejectUpgradeStatus int  // non-zero: reject the upgrade with this HTTP status instead of completing it
+		dialClosedPort      bool // dial a port nothing listens on: connection refused, no HTTP response
 		expectedError       string
 		expectedErrIs       error
 	}{
@@ -122,10 +134,16 @@ func TestHandshake(t *testing.T) {
 			expectedErrIs: errs.ErrServerDown,
 		},
 		{
-			// No handlerFunc: the test server below rejects the upgrade with this
-			// status, so dialer.Dial fails before the connection is ever
-			// established — distinct from "server closes connection", which fails
-			// during the read loop on an already-established connection.
+			// Connection refused: no HTTP response at all, unlike the
+			// rejectUpgradeStatus cases below.
+			name:           "connection refused (retryable)",
+			config:         HandshakeConfig{TaskType: "javascript", GrantToken: "test-token"},
+			dialClosedPort: true,
+			expectedErrIs:  errs.ErrDialFailed,
+		},
+		{
+			// Rejected before upgrade, unlike "server closes connection" above
+			// (which fails during the read loop on an already-established conn).
 			name: "dial rejected: broker not ready (retryable)",
 			config: HandshakeConfig{
 				TaskType:            "javascript",
@@ -210,6 +228,9 @@ func TestHandshake(t *testing.T) {
 				defer server.Close()
 
 				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
+			} else if tt.dialClosedPort {
+				addr := closedPortAddr(t)
+				tt.config.TaskBrokerServerURI = "http://" + addr
 			}
 
 			logger := logs.NewLogger(logs.InfoLevel, "")
@@ -218,6 +239,8 @@ func TestHandshake(t *testing.T) {
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
+			} else if tt.expectedErrIs != nil {
+				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}

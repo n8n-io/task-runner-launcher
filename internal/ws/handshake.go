@@ -98,14 +98,9 @@ func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) 
 	return wsConn, nil
 }
 
-// isRetryableDialError decides whether a dial failure is worth retrying. A nil
-// response means the failure happened before the broker ever answered (refused
-// connection, TLS error, timeout) — always transient. A rejected upgrade is
-// retryable only for the broker's own transient signals (rate-limited, not yet
-// ready) or an expired grant token, which self-corrects since the launcher fetches
-// a fresh one on every retry. Any other rejection (missing/malformed auth, wrong
-// path, an unexpected broker error) reflects a standing misconfiguration and must
-// not be retried silently forever.
+// isRetryableDialError: nil resp is a network-level failure (retryable). A rejected
+// upgrade is retryable only for the broker's transient signals; 403 (expired grant
+// token) self-corrects since a fresh one is fetched every retry.
 func isRetryableDialError(resp *http.Response) bool {
 	if resp == nil {
 		return true

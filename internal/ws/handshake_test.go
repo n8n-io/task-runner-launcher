@@ -159,7 +159,7 @@ func TestHandshake(t *testing.T) {
 
 				tt.config.TaskBrokerServerURI = "http://" + server.Listener.Addr().String()
 			} else if tt.rejectUpgrade {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusBadRequest)
 				}))
 				defer server.Close()

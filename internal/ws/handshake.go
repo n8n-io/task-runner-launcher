@@ -86,7 +86,7 @@ func connectToWebsocket(wsURL *url.URL, grantToken string, logger *logs.Logger) 
 
 	wsConn, _, err := dialer.Dial(wsURL.String(), reqHeader)
 	if err != nil {
-		return nil, fmt.Errorf("websocket connection failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", errs.ErrDialFailed, err)
 	}
 
 	logger.Debugf("Connected: %s", wsURL.String())

@@ -135,6 +135,10 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			c.logger.Warn("Task broker is down, launcher will try to reconnect...")
 			time.Sleep(time.Second * 5)
 			continue // back to checking until broker ready
+		case errors.Is(err, errs.ErrDialFailed):
+			c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v", err)
+			time.Sleep(time.Second * 5)
+			continue // back to checking until broker ready
 		case err != nil:
 			return fmt.Errorf("handshake failed: %w", err)
 		}

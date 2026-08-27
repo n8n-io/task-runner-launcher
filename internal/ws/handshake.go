@@ -106,7 +106,7 @@ func isRetryableDialError(resp *http.Response) bool {
 	if resp == nil {
 		return true
 	}
-	if resp.StatusCode >= 500 {
+	if resp.StatusCode >= 500 && resp.StatusCode < 600 {
 		return true
 	}
 	switch resp.StatusCode {

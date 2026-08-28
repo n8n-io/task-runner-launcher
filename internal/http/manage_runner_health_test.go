@@ -197,6 +197,43 @@ func TestManageRunnerHealth(t *testing.T) {
 	}
 }
 
+// TestManageRunnerHealthAlreadyExited verifies that the launcher does not
+// panic when the runner process has already exited between the health check
+// declaring it unhealthy and the launcher attempting to terminate it. This is
+// the os.ErrProcessDone race that surfaces in production when the runner is
+// OOM-killed (or otherwise dies) just before the launcher decides to kill it.
+func TestManageRunnerHealthAlreadyExited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start(), "Failed to start dummy process")
+
+	// Reap the process so cmd.Process.Kill() returns os.ErrProcessDone, the
+	// same condition Go produces when the kernel has already collected the
+	// child between unhealthy detection and our Kill call.
+	require.NoError(t, cmd.Process.Kill(), "Failed to pre-kill dummy process")
+	_, _ = cmd.Process.Wait()
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	// Must not panic. Before this fix, ManageRunnerHealth panicked with
+	// "failed to terminate unhealthy runner process: os: process already
+	// finished" once the unhealthy threshold was crossed.
+	assert.NotPanics(t, func() {
+		ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
+		time.Sleep(healthCheckInterval * time.Duration(healthCheckMaxFailures+1))
+	}, "ManageRunnerHealth must not panic when the runner process has already exited")
+
+	wg.Wait()
+}
+
 func TestContextCancellation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

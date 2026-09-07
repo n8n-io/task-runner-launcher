@@ -397,6 +397,10 @@ func TestConfigureRunnerShutdownForceKillsUnresponsiveRunner(t *testing.T) {
 func TestExecuteStopsOnCancelledContext(t *testing.T) {
 	// With an already-cancelled context (shutdown signalled), Execute must return
 	// cleanly without connecting to the broker or launching a runner.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -430,10 +434,7 @@ func TestExecuteStopsOnCancelledContext(t *testing.T) {
 
 func TestExecuteStopsDuringBrokerReadiness(t *testing.T) {
 	origWd, err := os.Getwd()
-	if err != nil {
-		origWd = "/"
-		require.NoError(t, os.Chdir(origWd))
-	}
+	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
 	requestReceived := make(chan struct{})

@@ -16,6 +16,8 @@ import (
 const (
 	// EnvVarHealthCheckPort is the env var for the port for the launcher's health check server.
 	EnvVarHealthCheckPort = "N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT"
+	// EnvVarBrokerReadinessPollInterval is the env var for the broker readiness poll interval.
+	EnvVarBrokerReadinessPollInterval = "N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS"
 )
 
 // LauncherConfig holds the full configuration for the launcher.
@@ -43,6 +45,9 @@ type BaseConfig struct {
 
 	// TaskBrokerURI is the URI of the task broker server.
 	TaskBrokerURI string `env:"N8N_RUNNERS_TASK_BROKER_URI, default=http://127.0.0.1:5679"`
+
+	// BrokerReadinessPollIntervalMs is the delay between broker readiness checks in milliseconds.
+	BrokerReadinessPollIntervalMs int `env:"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS, default=5000"`
 
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
@@ -120,6 +125,9 @@ func LoadLauncherConfig(runnerTypes []string, baseLookuper envconfig.Lookuper) (
 
 	if port, err := strconv.Atoi(baseConfig.HealthCheckServerPort); err != nil || port <= 0 || port >= 65536 {
 		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be a valid port number", EnvVarHealthCheckPort))
+	}
+	if baseConfig.BrokerReadinessPollIntervalMs < 100 {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be at least 100", EnvVarBrokerReadinessPollInterval))
 	}
 
 	if baseConfig.Sentry.Dsn != "" {

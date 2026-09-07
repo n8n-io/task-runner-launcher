@@ -103,7 +103,16 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 
 		// 3. check until task broker is ready
 
-		if err := http.CheckUntilBrokerReady(baseConfig.TaskBrokerURI, c.logger); err != nil {
+		if err := http.CheckUntilBrokerReady(
+			ctx,
+			baseConfig.TaskBrokerURI,
+			time.Duration(baseConfig.BrokerReadinessPollIntervalMs)*time.Millisecond,
+			c.logger,
+		); err != nil {
+			if errors.Is(err, context.Canceled) {
+				c.logger.Info("Received shutdown signal, launcher will stop")
+				return nil
+			}
 			return fmt.Errorf("encountered error while waiting for broker to be ready: %w", err)
 		}
 

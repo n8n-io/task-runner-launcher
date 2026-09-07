@@ -88,7 +88,7 @@ func TestLoadConfig(t *testing.T) {
 				if value, ok := tt.envVars[EnvVarBrokerReadinessPollInterval]; ok {
 					assert.Equal(t, value, fmt.Sprint(cfg.BaseConfig.BrokerReadinessPollIntervalMs))
 				} else {
-					assert.Equal(t, 5000, cfg.BaseConfig.BrokerReadinessPollIntervalMs)
+					assert.Equal(t, int64(5000), cfg.BaseConfig.BrokerReadinessPollIntervalMs)
 				}
 			}
 		})
@@ -153,6 +153,17 @@ func TestConfigFileErrors(t *testing.T) {
 				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
 				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
 				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "99",
+			},
+		},
+		{
+			name:          "broker readiness poll interval is too large",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS must not exceed 9223372036854",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":                                 "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
+				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "9223372036855",
 			},
 		},
 	}

@@ -429,7 +429,12 @@ func TestExecuteStopsOnCancelledContext(t *testing.T) {
 }
 
 func TestExecuteStopsDuringBrokerReadiness(t *testing.T) {
-	require.NoError(t, os.Chdir("/"))
+	origWd, err := os.Getwd()
+	if err != nil {
+		origWd = "/"
+		require.NoError(t, os.Chdir(origWd))
+	}
+	defer func() { _ = os.Chdir(origWd) }()
 
 	requestReceived := make(chan struct{})
 	var once sync.Once
@@ -450,7 +455,7 @@ func TestExecuteStopsDuringBrokerReadiness(t *testing.T) {
 		RunnerConfigs: map[string]*config.RunnerConfig{
 			"javascript": {
 				RunnerType:            "javascript",
-				WorkDir:               "/",
+				WorkDir:               t.TempDir(),
 				Command:               "node",
 				HealthCheckServerPort: "5681",
 			},

@@ -53,6 +53,9 @@ func CheckUntilBrokerReady(
 		if err == nil {
 			break
 		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		logger.Debugf("Task broker readiness check failed: %v", err)
 
 		select {

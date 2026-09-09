@@ -14,6 +14,9 @@ var (
 )
 
 type retryConfig struct {
+	Context context.Context
+	Debugf  func(string, ...any)
+
 	// MaxRetryTime is the max time (in seconds) to retry for before giving up.
 	// Set to 0 for infinite retry time.
 	MaxRetryTime time.Duration
@@ -26,16 +29,19 @@ type retryConfig struct {
 	WaitTimeBetweenRetries time.Duration
 }
 
-func retryWithContext[T any](
-	ctx context.Context,
-	operationName string,
-	operationFn func() (T, error),
-	cfg retryConfig,
-) (T, error) {
+func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
 	var lastErr error
 	var zero T
 	startTime := time.Now()
 	attempt := 1
+	ctx := cfg.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	debugf := cfg.Debugf
+	if debugf == nil {
+		debugf = logs.Debugf
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -69,7 +75,7 @@ func retryWithContext[T any](
 		}
 
 		lastErr = err
-		logs.Debugf("Attempt %d for operation `%s` failed, error: %v", attempt, operationName, err)
+		debugf("Attempt %d for operation `%s` failed, error: %v", attempt, operationName, err)
 		attempt++
 
 		timer := time.NewTimer(cfg.WaitTimeBetweenRetries)
@@ -80,10 +86,6 @@ func retryWithContext[T any](
 		case <-timer.C:
 		}
 	}
-}
-
-func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
-	return retryWithContext(context.Background(), operationName, operationFn, cfg)
 }
 
 // UnlimitedRetry retries an operation forever.
@@ -100,9 +102,12 @@ func UnlimitedRetryWithContext[T any](
 	ctx context.Context,
 	operationName string,
 	waitTimeBetweenRetries time.Duration,
+	debugf func(string, ...any),
 	operationFn func() (T, error),
 ) (T, error) {
-	return retryWithContext(ctx, operationName, operationFn, retryConfig{
+	return retry(operationName, operationFn, retryConfig{
+		Context:                ctx,
+		Debugf:                 debugf,
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
 		WaitTimeBetweenRetries: waitTimeBetweenRetries,

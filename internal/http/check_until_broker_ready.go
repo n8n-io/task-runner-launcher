@@ -53,6 +53,7 @@ func CheckUntilBrokerReady(
 		ctx,
 		"readiness-check",
 		retryInterval,
+		logger.Debugf,
 		healthCheck,
 	); err != nil {
 		return err

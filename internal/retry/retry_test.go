@@ -90,9 +90,12 @@ func TestUnlimitedRetryWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	attempted := make(chan struct{})
 	done := make(chan error, 1)
+	loggedAttempts := 0
 
 	go func() {
-		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, func() (string, error) {
+		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, func(string, ...any) {
+			loggedAttempts++
+		}, func() (string, error) {
 			close(attempted)
 			return "", errors.New("temporary error")
 		})
@@ -105,6 +108,7 @@ func TestUnlimitedRetryWithContext(t *testing.T) {
 	select {
 	case err := <-done:
 		assert.ErrorIs(t, err, context.Canceled)
+		assert.Equal(t, 1, loggedAttempts)
 	case <-time.After(time.Second):
 		t.Fatal("retry did not stop after cancellation")
 	}

@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -82,6 +83,30 @@ func TestUnlimitedRetry(t *testing.T) {
 			assert.Equal(t, tt.expectedValue, result)
 			assert.Equal(t, tt.expectedCalls, callCount)
 		})
+	}
+}
+
+func TestUnlimitedRetryWithContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	attempted := make(chan struct{})
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, func() (string, error) {
+			close(attempted)
+			return "", errors.New("temporary error")
+		})
+		done <- err
+	}()
+
+	<-attempted
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("retry did not stop after cancellation")
 	}
 }
 

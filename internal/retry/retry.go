@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"context"
 	"fmt"
 	"task-runner-launcher/internal/logs"
 	"time"
@@ -25,13 +26,22 @@ type retryConfig struct {
 	WaitTimeBetweenRetries time.Duration
 }
 
-func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
+func retryWithContext[T any](
+	ctx context.Context,
+	operationName string,
+	operationFn func() (T, error),
+	cfg retryConfig,
+) (T, error) {
 	var lastErr error
 	var zero T
 	startTime := time.Now()
 	attempt := 1
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
+
 		if cfg.MaxRetryTime > 0 && time.Since(startTime) > cfg.MaxRetryTime {
 			return zero, fmt.Errorf(
 				"gave up retrying operation `%s` on reaching max retry time %v, last error: %w",
@@ -54,13 +64,26 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 		if err == nil {
 			return result, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
 
 		lastErr = err
 		logs.Debugf("Attempt %d for operation `%s` failed, error: %v", attempt, operationName, err)
 		attempt++
 
-		time.Sleep(cfg.WaitTimeBetweenRetries)
+		timer := time.NewTimer(cfg.WaitTimeBetweenRetries)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return zero, ctx.Err()
+		case <-timer.C:
+		}
 	}
+}
+
+func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
+	return retryWithContext(context.Background(), operationName, operationFn, cfg)
 }
 
 // UnlimitedRetry retries an operation forever.
@@ -69,6 +92,20 @@ func UnlimitedRetry[T any](operationName string, operationFn func() (T, error)) 
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
 		WaitTimeBetweenRetries: DefaultWaitTimeBetweenRetries,
+	})
+}
+
+// UnlimitedRetryWithContext retries an operation forever until it succeeds or the context is cancelled.
+func UnlimitedRetryWithContext[T any](
+	ctx context.Context,
+	operationName string,
+	waitTimeBetweenRetries time.Duration,
+	operationFn func() (T, error),
+) (T, error) {
+	return retryWithContext(ctx, operationName, operationFn, retryConfig{
+		MaxRetryTime:           0,
+		MaxAttempts:            0,
+		WaitTimeBetweenRetries: waitTimeBetweenRetries,
 	})
 }
 

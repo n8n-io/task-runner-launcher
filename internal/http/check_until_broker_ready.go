@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/retry"
 	"time"
 )
 
@@ -48,21 +49,13 @@ func CheckUntilBrokerReady(
 		return "", nil
 	}
 
-	for {
-		_, err := healthCheck()
-		if err == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		logger.Debugf("Task broker readiness check failed: %v", err)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(retryInterval):
-		}
+	if _, err := retry.UnlimitedRetryWithContext(
+		ctx,
+		"readiness-check",
+		retryInterval,
+		healthCheck,
+	); err != nil {
+		return err
 	}
 
 	logger.Debug("Task broker is ready")

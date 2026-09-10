@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,10 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadConfig(t *testing.T) {
-	testConfigPath := filepath.Join(t.TempDir(), "testconfig.json")
-
-	validConfigContent := `{
+const validConfigContent = `{
 		"task-runners": [{
 			"runner-type": "javascript",
 			"workdir": "/test/dir",
@@ -22,6 +20,9 @@ func TestLoadConfig(t *testing.T) {
 			"allowed-env": ["PATH", "NODE_ENV"]
 		}]
 	}`
+
+func TestLoadConfig(t *testing.T) {
+	testConfigPath := filepath.Join(t.TempDir(), "testconfig.json")
 
 	tests := []struct {
 		name          string
@@ -39,6 +40,18 @@ func TestLoadConfig(t *testing.T) {
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
 				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
 				"SENTRY_DSN":                  "https://test@sentry.io/123",
+			},
+			runnerType:    "javascript",
+			expectedError: false,
+		},
+		{
+			name:          "custom broker readiness poll interval",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":                                 "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
+				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "500",
 			},
 			runnerType:    "javascript",
 			expectedError: false,
@@ -72,6 +85,11 @@ func TestLoadConfig(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, cfg)
+				if value, ok := tt.envVars[EnvVarBrokerReadinessPollInterval]; ok {
+					assert.Equal(t, value, fmt.Sprint(cfg.BaseConfig.BrokerReadinessPollIntervalMs))
+				} else {
+					assert.Equal(t, int64(5000), cfg.BaseConfig.BrokerReadinessPollIntervalMs)
+				}
 			}
 		})
 	}
@@ -124,6 +142,28 @@ func TestConfigFileErrors(t *testing.T) {
 				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
 				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
 				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+			},
+		},
+		{
+			name:          "broker readiness poll interval is too short",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS must be at least 100",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":                                 "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
+				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "99",
+			},
+		},
+		{
+			name:          "broker readiness poll interval is too large",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS must not exceed 9223372036854",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":                                 "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
+				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "9223372036855",
 			},
 		},
 	}

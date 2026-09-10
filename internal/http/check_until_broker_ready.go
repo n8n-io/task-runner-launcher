@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"task-runner-launcher/internal/logs"
@@ -8,14 +9,14 @@ import (
 	"time"
 )
 
-func sendHealthRequest(taskBrokerURI string) (*http.Response, error) {
+func sendHealthRequest(ctx context.Context, taskBrokerURI string) (*http.Response, error) {
 	url := fmt.Sprintf("%s/healthz", taskBrokerURI)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -26,11 +27,16 @@ func sendHealthRequest(taskBrokerURI string) (*http.Response, error) {
 // CheckUntilBrokerReady checks forever until the task broker is ready, i.e.
 // In case of long-running migrations, readiness may take a long time.
 // Returns nil when ready.
-func CheckUntilBrokerReady(taskBrokerURI string, logger *logs.Logger) error {
+func CheckUntilBrokerReady(
+	ctx context.Context,
+	taskBrokerURI string,
+	retryInterval time.Duration,
+	logger *logs.Logger,
+) error {
 	logger.Info("Waiting for task broker to be ready...")
 
 	healthCheck := func() (string, error) {
-		resp, err := sendHealthRequest(taskBrokerURI)
+		resp, err := sendHealthRequest(ctx, taskBrokerURI)
 		if err != nil {
 			return "", fmt.Errorf("task broker readiness check failed with error: %w", err)
 		}
@@ -43,7 +49,13 @@ func CheckUntilBrokerReady(taskBrokerURI string, logger *logs.Logger) error {
 		return "", nil
 	}
 
-	if _, err := retry.UnlimitedRetry("readiness-check", healthCheck); err != nil {
+	if _, err := retry.UnlimitedRetryWithContext(
+		ctx,
+		"readiness-check",
+		retryInterval,
+		logger,
+		healthCheck,
+	); err != nil {
 		return err
 	}
 

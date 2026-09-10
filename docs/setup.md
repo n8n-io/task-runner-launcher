@@ -72,6 +72,7 @@ On `SIGTERM`/`SIGINT` the launcher forwards the signal to the runner so it can f
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT` | runner grace + 2 x margin (= `50`) | Seconds the launcher waits for the runner to drain and exit before force-killing it. Derived as `N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT + 2 x N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN`, so raising either raises this automatically; set it to override. |
+| `N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS` | `5000` | Milliseconds between task broker readiness checks. Values below `100` are not valid. |
 
 The runner force-exits itself at `grace + margin`; the launcher waits one further margin (`grace + 2 x margin`) so that self-exit happens first. Set `N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN` (default `10`) on the runner's environment to tune the gap.
 

@@ -14,19 +14,31 @@ import (
 
 func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 	tests := []struct {
-		name          string
-		serverFn      func(http.ResponseWriter, *http.Request, int)
-		maxReqs       int
-		expectedError error
-		timeout       time.Duration
+		name             string
+		serverFn         func(http.ResponseWriter, *http.Request, int)
+		expectedRequests int
+		expectedError    error
+		timeout          time.Duration
 	}{
 		{
 			name: "success on first try",
 			serverFn: func(w http.ResponseWriter, _ *http.Request, _ int) {
 				w.WriteHeader(http.StatusOK)
 			},
-			maxReqs: 1,
-			timeout: 100 * time.Millisecond,
+			expectedRequests: 1,
+			timeout:          time.Second,
+		},
+		{
+			name: "success after broker becomes ready",
+			serverFn: func(w http.ResponseWriter, _ *http.Request, requestCount int) {
+				if requestCount == 1 {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			},
+			expectedRequests: 2,
+			timeout:          time.Second,
 		},
 	}
 
@@ -45,7 +57,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			done := make(chan error)
 			go func() {
 				logger := logs.NewLogger(logs.InfoLevel, "")
-				done <- CheckUntilBrokerReady(srv.URL, logger)
+				done <- CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, logger)
 			}()
 
 			select {
@@ -55,7 +67,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 				} else {
 					assert.EqualError(t, err, tt.expectedError.Error(), "Unexpected error")
 				}
-				assert.LessOrEqual(t, requestCount, tt.maxReqs, "Too many requests made")
+				assert.Equal(t, tt.expectedRequests, requestCount, "Unexpected number of requests")
 
 			case <-ctx.Done():
 				t.Error("test timed out")
@@ -90,26 +102,40 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 				defer srv.Close()
 			}
 
-			// CheckUntilBrokerReady retries forever, so set up
-			// - context timeout to show retry loop keeps running without returning
-			// - channel to catch any unexpected early returns
-			// - goroutine to prevent this infinite retries from blocking tests
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			brokerUnexpectedlyReady := make(chan error)
-			go func() {
-				logger := logs.NewLogger(logs.InfoLevel, "")
-				brokerUnexpectedlyReady <- CheckUntilBrokerReady(srv.URL, logger)
-			}()
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			err := CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
 
-			select {
-			case <-ctx.Done():
-				// expected timeout
-			case err := <-brokerUnexpectedlyReady:
-				assert.Fail(t, "Expected timeout, got %v", err)
-			}
+			assert.ErrorIs(t, err, context.DeadlineExceeded)
 		})
+	}
+}
+
+func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
+	requestStarted := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		logger := logs.NewLogger(logs.InfoLevel, "")
+		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
+	}()
+
+	<-requestStarted
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Broker readiness request did not stop after cancellation")
 	}
 }
 
@@ -145,7 +171,7 @@ func TestSendReadinessRequest(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resp, err := sendHealthRequest(srv.URL)
+			resp, err := sendHealthRequest(context.Background(), srv.URL)
 
 			if !tt.expectedError {
 				require.NoError(t, err, "Unexpected error making request")

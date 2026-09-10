@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/logs"
@@ -396,6 +397,10 @@ func TestConfigureRunnerShutdownForceKillsUnresponsiveRunner(t *testing.T) {
 func TestExecuteStopsOnCancelledContext(t *testing.T) {
 	// With an already-cancelled context (shutdown signalled), Execute must return
 	// cleanly without connecting to the broker or launching a runner.
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -424,6 +429,52 @@ func TestExecuteStopsOnCancelledContext(t *testing.T) {
 		assert.NoError(t, err, "Execute should return nil when the context is already cancelled")
 	case <-time.After(2 * time.Second):
 		t.Fatal("Execute did not return promptly on a cancelled context")
+	}
+}
+
+func TestExecuteStopsDuringBrokerReadiness(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	requestReceived := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		once.Do(func() { close(requestReceived) })
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:                 srv.URL,
+			AuthToken:                     "test",
+			BrokerReadinessPollIntervalMs: 5000,
+			RunnerHealthCheckServerHost:   "127.0.0.1",
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				Command:               "node",
+				HealthCheckServerPort: "5681",
+			},
+		},
+	}
+
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	<-requestReceived
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "Execute should stop cleanly during broker readiness checks")
+	case <-time.After(time.Second):
+		t.Fatal("Execute did not stop during broker readiness checks")
 	}
 }
 

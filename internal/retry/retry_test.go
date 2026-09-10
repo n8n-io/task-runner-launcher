@@ -3,6 +3,7 @@ package retry
 import (
 	"context"
 	"errors"
+	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
@@ -88,19 +89,19 @@ func TestUnlimitedRetry(t *testing.T) {
 
 func TestUnlimitedRetryWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	attemptLogged := make(chan struct{})
+	attempted := make(chan struct{})
 	done := make(chan error, 1)
+	logger := logs.NewLogger(logs.InfoLevel, "")
 
 	go func() {
-		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, func(string, ...any) {
-			close(attemptLogged)
-		}, func() (string, error) {
+		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, logger, func() (string, error) {
+			close(attempted)
 			return "", errors.New("temporary error")
 		})
 		done <- err
 	}()
 
-	<-attemptLogged
+	<-attempted
 	cancel()
 
 	select {

@@ -15,7 +15,7 @@ var (
 
 type retryConfig struct {
 	Context context.Context
-	Debugf  func(string, ...any)
+	Logger  *logs.Logger
 
 	// MaxRetryTime is the max time (in seconds) to retry for before giving up.
 	// Set to 0 for infinite retry time.
@@ -38,9 +38,9 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	debugf := cfg.Debugf
-	if debugf == nil {
-		debugf = logs.Debugf
+	debugf := logs.Debugf
+	if cfg.Logger != nil {
+		debugf = cfg.Logger.Debugf
 	}
 
 	for {
@@ -102,12 +102,12 @@ func UnlimitedRetryWithContext[T any](
 	ctx context.Context,
 	operationName string,
 	waitTimeBetweenRetries time.Duration,
-	debugf func(string, ...any),
+	logger *logs.Logger,
 	operationFn func() (T, error),
 ) (T, error) {
 	return retry(operationName, operationFn, retryConfig{
 		Context:                ctx,
-		Debugf:                 debugf,
+		Logger:                 logger,
 		MaxRetryTime:           0,
 		MaxAttempts:            0,
 		WaitTimeBetweenRetries: waitTimeBetweenRetries,

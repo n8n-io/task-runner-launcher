@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -195,6 +196,29 @@ func TestManageRunnerHealth(t *testing.T) {
 			wg.Wait()
 		})
 	}
+}
+
+func TestManageRunnerHealthRunnerAlreadyExited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cmd := exec.Command("true")
+	require.NoError(t, cmd.Start(), "Failed to start short-lived dummy process")
+	require.NoError(t, cmd.Wait(), "Dummy process should exit cleanly")
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	logger := logs.NewLogger(logs.InfoLevel, "")
+	ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
+
+	time.Sleep(healthCheckInterval * time.Duration(healthCheckMaxFailures+1))
+
+	wg.Wait()
+	assert.ErrorIs(t, cmd.Process.Kill(), os.ErrProcessDone, "Expected the process to have already been reaped")
 }
 
 func TestContextCancellation(t *testing.T) {

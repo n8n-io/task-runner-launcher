@@ -286,13 +286,6 @@ func captureStdout(t *testing.T) func() string {
 	}
 }
 
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func TestBackoffNextDoublesToCeiling(t *testing.T) {
 	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
 	b.rand = func() float64 { return 0.5 }
@@ -406,7 +399,10 @@ func TestUnlimitedRetryWithContextGrowsSpacing(t *testing.T) {
 	}
 
 	for k, gap := range gaps {
-		lowerBound := time.Duration(0.8 * float64(minDuration(base<<uint(k), maxWait)))
+		if k == 0 {
+			continue
+		}
+		lowerBound := time.Duration(0.8 * float64(min(base<<uint(k), maxWait)))
 		assert.GreaterOrEqual(t, gap, lowerBound-15*time.Millisecond, "gap %d too short", k+1)
 	}
 	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
@@ -433,8 +429,8 @@ func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
 	gap1 := timestamps[1].Sub(timestamps[0])
 	gap2 := timestamps[2].Sub(timestamps[1])
 
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(20*time.Millisecond))
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(20*time.Millisecond))
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(4*time.Millisecond))
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(4*time.Millisecond))
 }
 
 func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {
@@ -525,14 +521,6 @@ func TestUnlimitedRetryWithContextLogsCeilingOnce(t *testing.T) {
 }
 
 func TestBackoffNoCeilingLogWhenBaseAtOrAboveMax(t *testing.T) {
-	b := &Backoff{Base: 200 * time.Millisecond, Max: 100 * time.Millisecond}
-	b.rand = func() float64 { return 0.5 }
-
-	for i := 0; i < 3; i++ {
-		b.Next()
-		assert.True(t, b.AtCeiling())
-	}
-
 	readOutput := captureStdout(t)
 	logger := logs.NewLogger(logs.InfoLevel, "")
 

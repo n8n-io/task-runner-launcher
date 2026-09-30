@@ -80,8 +80,9 @@ func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 }
 
 // fakeBrokerRejectsDial rejects every upgrade with the given status (a standing
-// misconfiguration, not a blip).
-func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
+// misconfiguration, not a blip). onDialAttempt, if given, is called for every
+// rejected upgrade.
+func fakeBrokerRejectsDial(t *testing.T, status int, onDialAttempt ...func()) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -91,6 +92,9 @@ func fakeBrokerRejectsDial(t *testing.T, status int) *httptest.Server {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
 		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			for _, record := range onDialAttempt {
+				record()
+			}
 			w.WriteHeader(status)
 		}
 	}))
@@ -527,25 +531,18 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 	}
 }
 
-func fakeBrokerRecordsDialAttempts(t *testing.T, status int) (*httptest.Server, func() []time.Time) {
-	t.Helper()
+func TestExecuteDialBackoffGrowsWithEachFailure(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
 	var mu sync.Mutex
 	var timestamps []time.Time
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/healthz":
-			w.WriteHeader(http.StatusOK)
-		case r.URL.Path == "/runners/auth":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
-		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
-			mu.Lock()
-			timestamps = append(timestamps, time.Now())
-			mu.Unlock()
-			w.WriteHeader(status)
-		}
-	}))
-
+	srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable, func() {
+		mu.Lock()
+		timestamps = append(timestamps, time.Now())
+		mu.Unlock()
+	})
 	getTimestamps := func() []time.Time {
 		mu.Lock()
 		defer mu.Unlock()
@@ -553,16 +550,6 @@ func fakeBrokerRecordsDialAttempts(t *testing.T, status int) (*httptest.Server, 
 		copy(out, timestamps)
 		return out
 	}
-
-	return srv, getTimestamps
-}
-
-func TestExecuteDialBackoffGrowsWithEachFailure(t *testing.T) {
-	origWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() { _ = os.Chdir(origWd) }()
-
-	srv, getTimestamps := fakeBrokerRecordsDialAttempts(t, http.StatusServiceUnavailable)
 	defer srv.Close()
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
@@ -603,12 +590,12 @@ func TestExecuteDialBackoffGrowsWithEachFailure(t *testing.T) {
 		t.Fatal("Execute did not return after shutdown")
 	}
 
-	timestamps := getTimestamps()
-	require.GreaterOrEqual(t, len(timestamps), 5)
+	recorded := getTimestamps()
+	require.GreaterOrEqual(t, len(recorded), 5)
 
-	gaps := make([]time.Duration, 0, len(timestamps)-1)
-	for i := 1; i < len(timestamps); i++ {
-		gaps = append(gaps, timestamps[i].Sub(timestamps[i-1]))
+	gaps := make([]time.Duration, 0, len(recorded)-1)
+	for i := 1; i < len(recorded); i++ {
+		gaps = append(gaps, recorded[i].Sub(recorded[i-1]))
 	}
 
 	step := base

@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"task-runner-launcher/internal/config"
+	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
@@ -816,16 +818,21 @@ func TestExecuteReconnectCeilingLogging(t *testing.T) {
 			output := readLogs()
 
 			errorLines := 0
+			var errorLine string
 			for _, line := range strings.Split(output, "\n") {
 				if strings.Contains(line, "ERROR") {
 					errorLines++
+					errorLine = line
 				}
 			}
 
 			if tt.expectCeilingLog {
 				assert.Equal(t, 1, errorLines, "reaching the ceiling should log exactly one ERROR line")
-				assert.Contains(t, output, "attempt")
-				assert.Contains(t, output, "failing for")
+				ceiling := (time.Duration(tt.retryMaxMs) * time.Millisecond).Round(time.Second)
+				assert.Contains(t, errorLine, fmt.Sprintf("task broker still unreachable, retrying every %s", ceiling))
+				if strings.Contains(tt.name, "dial failure") {
+					assert.Contains(t, errorLine, errs.ErrDialFailed.Error())
+				}
 			} else {
 				assert.Equal(t, 0, errorLines, "should log no ERROR line below the ceiling")
 			}
@@ -996,4 +1003,108 @@ func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
 
 	secondGap := acceptTimes[1].Sub(rejectionTimes[1])
 	assert.Less(t, secondGap, time.Duration(1.5*float64(base)))
+}
+
+// fakeBrokerRejectsDialThenHoldsOffer rejects the first failCount upgrades, then accepts
+// and holds the task offer unaccepted for holdDelay before completing the handshake.
+func fakeBrokerRejectsDialThenHoldsOffer(t *testing.T, failCount int32, holdDelay time.Duration) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	var attempts int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			if atomic.AddInt32(&attempts, 1) <= failCount {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			var msg map[string]any
+			_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
+			_ = conn.ReadJSON(&msg) // runner:info
+			_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
+			_ = conn.ReadJSON(&msg) // runner:taskoffer
+			time.Sleep(holdDelay)
+			_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
+			_ = conn.ReadJSON(&msg) // runner:taskdeferred
+		}
+	}))
+}
+
+func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	var failCount int32 = 2
+	base := 100 * time.Millisecond
+	holdDelay := 2 * time.Second
+
+	srv := fakeBrokerRejectsDialThenHoldsOffer(t, failCount, holdDelay)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         int64(base / time.Millisecond),
+			RetryMaxIntervalMs:          int64(5 * time.Second / time.Millisecond),
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5695",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after the runner failed to start")
+	}
+
+	output := readLogs()
+
+	occurrences := strings.Count(output, "Reconnected to task broker after")
+	require.Equal(t, 1, occurrences, "exactly one reconnected INFO line should be logged")
+
+	idx := strings.Index(output, "Reconnected to task broker after")
+	rest := output[idx+len("Reconnected to task broker after "):]
+
+	var gotAttempts int
+	var elapsedToken string
+	_, err = fmt.Sscanf(rest, "%d attempts over %s", &gotAttempts, &elapsedToken)
+	require.NoError(t, err)
+	if i := strings.IndexByte(elapsedToken, 0x1b); i != -1 {
+		elapsedToken = elapsedToken[:i]
+	}
+
+	gotElapsed, err := time.ParseDuration(elapsedToken)
+	require.NoError(t, err)
+
+	assert.Equal(t, int(failCount), gotAttempts)
+	assert.Less(t, gotElapsed, holdDelay,
+		"reported elapsed should exclude the time spent connected waiting for the task")
 }

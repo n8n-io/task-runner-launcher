@@ -453,6 +453,63 @@ func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
 	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(20*time.Millisecond))
 }
 
+func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+
+	assert.Equal(t, 0, b.Attempts())
+	assert.Equal(t, time.Duration(0), b.Since())
+	assert.False(t, b.AtCeiling())
+}
+
+func TestBackoffNextStaysAtCeilingAfterManyCalls(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+	b.rand = func() float64 { return 0.5 }
+
+	b.Next()
+	b.Next()
+	b.Next()
+
+	for i := 0; i < 100; i++ {
+		got := b.Next()
+		assert.Equal(t, 500*time.Millisecond, got, "call %d", i+1)
+	}
+	assert.True(t, b.AtCeiling())
+}
+
+func TestBackoffNextClampsNegativeJitterFactor(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+	b.rand = func() float64 { return -10 }
+
+	got := b.Next()
+
+	assert.Equal(t, time.Duration(0), got)
+}
+
+func TestWaitReturnsPromptlyForZeroAndNegativeDuration(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+	}{
+		{name: "zero duration", d: 0},
+		{name: "negative duration", d: -time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			done := make(chan error, 1)
+			go func() { done <- Wait(ctx, tt.d) }()
+
+			select {
+			case err := <-done:
+				assert.NoError(t, err)
+			case <-time.After(50 * time.Millisecond):
+				t.Fatal("Wait did not return promptly")
+			}
+		})
+	}
+}
+
 func TestBackoffNoCeilingLogWhenBaseAtOrAboveMax(t *testing.T) {
 	b := &Backoff{Base: 200 * time.Millisecond, Max: 100 * time.Millisecond}
 	b.rand = func() float64 { return 0.5 }

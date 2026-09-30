@@ -27,6 +27,7 @@ const (
 	defaultForceKillMarginSeconds = 10
 )
 
+// stableConnectionThreshold is how long a connection must last before its drop starts a new backoff streak instead of continuing the old one.
 const stableConnectionThreshold = 60 * time.Second
 
 // positiveEnvSeconds reads a positive integer from env, falling back to def.
@@ -175,6 +176,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 		case errors.Is(err, errs.ErrServerDown):
 			if time.Since(handshakeStart) >= stableConnectionThreshold {
 				if attempts := backoff.Attempts(); attempts >= 2 {
+					// Exclude this handshake's connected time so elapsed covers only the failing streak.
 					elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
 					c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
 				}
@@ -212,6 +214,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 		}
 
 		if attempts := backoff.Attempts(); attempts >= 2 {
+			// Exclude this handshake's connected time so elapsed covers only the failing streak.
 			elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
 			c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
 		}

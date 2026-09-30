@@ -30,6 +30,8 @@ type retryConfig struct {
 	// WaitTimeBetweenRetries is the time (in seconds) to wait between retries.
 	WaitTimeBetweenRetries time.Duration
 
+	// MaxWaitTimeBetweenRetries is the ceiling for the growing delay between
+	// retries. Set to 0 to keep a flat WaitTimeBetweenRetries delay.
 	MaxWaitTimeBetweenRetries time.Duration
 }
 
@@ -152,6 +154,8 @@ func LimitedRetry[T any](operationName string, operationFn func() (T, error)) (T
 	})
 }
 
+// Backoff computes a jittered exponential delay between retries, capped at
+// Max (or Base, if larger).
 type Backoff struct {
 	Base time.Duration
 	Max  time.Duration
@@ -161,16 +165,23 @@ type Backoff struct {
 	startTime time.Time
 }
 
+// effectiveCeiling is Max, or Base when Base is the larger of the two, so a
+// Base above the configured ceiling still gives a flat delay.
 func (b *Backoff) effectiveCeiling() time.Duration {
 	return max(b.Max, b.Base)
 }
 
+// preJitterStepSeconds is computed in float64 seconds because doubling in
+// time.Duration would overflow for a long streak; the result is clamped to
+// the ceiling before any conversion back to a Duration.
 func (b *Backoff) preJitterStepSeconds(attempt int) float64 {
 	baseSeconds := b.Base.Seconds()
 	effCeilingSeconds := b.effectiveCeiling().Seconds()
 	return min(baseSeconds*math.Pow(2, float64(attempt-1)), effCeilingSeconds)
 }
 
+// Next returns the next jittered delay and advances the attempt count,
+// starting the elapsed-time clock on the first call.
 func (b *Backoff) Next() time.Duration {
 	if b.rand == nil {
 		b.rand = rand.Float64
@@ -194,27 +205,39 @@ func (b *Backoff) Next() time.Duration {
 	return time.Duration(delaySeconds * float64(time.Second))
 }
 
+// Advance returns the next delay and whether this attempt is the first to
+// reach the ceiling.
 func (b *Backoff) Advance() (time.Duration, bool) {
 	wasAtCeiling := b.attempt > 0 && b.AtCeiling()
 	d := b.Next()
+	// Only report reaching the ceiling when Max is actually above Base;
+	// otherwise the delay was flat from the first attempt, never growing.
 	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.AtCeiling()
 	return d, justReachedCeiling
 }
 
+// Reset clears the attempt count and elapsed time, returning the next delay
+// to the base step.
 func (b *Backoff) Reset() {
 	b.attempt = 0
 	b.startTime = time.Time{}
 }
 
+// Attempts returns the number of Next calls since construction or the last
+// Reset.
 func (b *Backoff) Attempts() int {
 	return b.attempt
 }
 
+// AtCeiling reports whether the current attempt's step has reached the
+// effective ceiling.
 func (b *Backoff) AtCeiling() bool {
 	effCeilingSeconds := b.effectiveCeiling().Seconds()
 	return b.preJitterStepSeconds(b.attempt) >= effCeilingSeconds
 }
 
+// Since returns the elapsed time since the first Next call, or 0 if Next has
+// not been called.
 func (b *Backoff) Since() time.Duration {
 	if b.startTime.IsZero() {
 		return 0
@@ -222,6 +245,7 @@ func (b *Backoff) Since() time.Duration {
 	return time.Since(b.startTime)
 }
 
+// Wait blocks until d elapses or ctx is done, returning ctx.Err() on cancellation.
 func Wait(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()

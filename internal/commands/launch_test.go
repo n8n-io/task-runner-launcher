@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -157,6 +158,7 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 			TaskBrokerURI:               srv.URL,
 			AuthToken:                   "test",
 			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         100,
 		},
 		RunnerConfigs: map[string]*config.RunnerConfig{
 			"javascript": {
@@ -176,7 +178,7 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
 
 	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
-		12*time.Second, 50*time.Millisecond, "launcher should retry past the dial failure and launch the runner")
+		2*time.Second, 50*time.Millisecond, "launcher should retry past the dial failure and launch the runner")
 
 	cancel()
 	select {
@@ -505,4 +507,386 @@ func TestLauncherShutdownTimeout(t *testing.T) {
 		t.Setenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT", "not-a-number")
 		assert.Equal(t, defaultTimeout, launcherShutdownTimeout())
 	})
+}
+
+func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	os.Stderr = w
+
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	return logger, func() string {
+		_ = w.Close()
+		os.Stdout, os.Stderr = origOut, origErr
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+}
+
+func fakeBrokerRecordsDialAttempts(t *testing.T, status int) (*httptest.Server, func() []time.Time) {
+	t.Helper()
+	var mu sync.Mutex
+	var timestamps []time.Time
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			mu.Lock()
+			timestamps = append(timestamps, time.Now())
+			mu.Unlock()
+			w.WriteHeader(status)
+		}
+	}))
+
+	getTimestamps := func() []time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]time.Time, len(timestamps))
+		copy(out, timestamps)
+		return out
+	}
+
+	return srv, getTimestamps
+}
+
+func TestExecuteDialBackoffGrowsWithEachFailure(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv, getTimestamps := fakeBrokerRecordsDialAttempts(t, http.StatusServiceUnavailable)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	base := 50 * time.Millisecond
+	maxWait := 300 * time.Millisecond
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         int64(base / time.Millisecond),
+			RetryMaxIntervalMs:          int64(maxWait / time.Millisecond),
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5686",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool { return len(getTimestamps()) >= 5 }, 5*time.Second, 20*time.Millisecond,
+		"launcher should keep retrying past 5 dial attempts")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	timestamps := getTimestamps()
+	require.GreaterOrEqual(t, len(timestamps), 5)
+
+	gaps := make([]time.Duration, 0, len(timestamps)-1)
+	for i := 1; i < len(timestamps); i++ {
+		gaps = append(gaps, timestamps[i].Sub(timestamps[i-1]))
+	}
+
+	step := base
+	for k, gap := range gaps {
+		lowerBound := time.Duration(0.8*float64(step)) - 20*time.Millisecond
+		assert.GreaterOrEqual(t, gap, lowerBound, "gap %d too short", k+1)
+		if step < maxWait {
+			step *= 2
+			if step > maxWait {
+				step = maxWait
+			}
+		}
+	}
+	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
+}
+
+func TestExecuteDialRetryCeilingLogging(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         20,
+			RetryMaxIntervalMs:          60,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5687",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	time.Sleep(700 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	output := readLogs()
+
+	errorLines := 0
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "ERROR") {
+			errorLines++
+		}
+	}
+	assert.Equal(t, 1, errorLines, "reaching the ceiling should log exactly one ERROR line")
+	assert.Contains(t, output, "attempt")
+	assert.Contains(t, output, "failing for")
+}
+
+func TestExecuteReconnectsCleanlyOnShutdownDuringDialBackoff(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerDialFailsOnce(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         10000,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5688",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case execErr := <-done:
+		assert.NoError(t, execErr, "Execute should stop cleanly during a dial backoff wait")
+	case <-time.After(time.Second):
+		t.Fatal("Execute did not stop during a dial backoff wait")
+	}
+
+	assert.Contains(t, readLogs(), "Received shutdown signal, launcher will stop")
+}
+
+func fakeBrokerRejectsFirstUpgradePerRound(t *testing.T) (srv *httptest.Server, rejections func() []time.Time, accepts func() []time.Time) {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	var mu sync.Mutex
+	var rejectionTimes []time.Time
+	var acceptTimes []time.Time
+	shouldReject := true
+
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			mu.Lock()
+			reject := shouldReject
+			mu.Unlock()
+			if reject {
+				mu.Lock()
+				rejectionTimes = append(rejectionTimes, time.Now())
+				shouldReject = false
+				mu.Unlock()
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			mu.Lock()
+			acceptTimes = append(acceptTimes, time.Now())
+			shouldReject = true
+			mu.Unlock()
+			completeWsHandshake(t, upgrader, w, r)
+		}
+	}))
+
+	rejections = func() []time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]time.Time, len(rejectionTimes))
+		copy(out, rejectionTimes)
+		return out
+	}
+	accepts = func() []time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]time.Time, len(acceptTimes))
+		copy(out, acceptTimes)
+		return out
+	}
+
+	return srv, rejections, accepts
+}
+
+func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "runner-started")
+	script := filepath.Join(dir, "runner.sh")
+	require.NoError(t, os.WriteFile(script,
+		[]byte("#!/bin/sh\necho up > "+marker+"\nsleep 0.2\nexit 0\n"),
+		0o600))
+
+	srv, rejections, accepts := fakeBrokerRejectsFirstUpgradePerRound(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	base := 200 * time.Millisecond
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         int64(base / time.Millisecond),
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               dir,
+				Command:               "/bin/sh",
+				Args:                  []string{script},
+				HealthCheckServerPort: "5689",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
+		3*time.Second, 20*time.Millisecond, "launcher should launch the runner after the first round's rejection")
+
+	require.Eventually(t, func() bool { return len(rejections()) >= 2 }, 5*time.Second, 20*time.Millisecond,
+		"launcher should reject-then-accept a second round after the runner exits on its own")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	rejectionTimes := rejections()
+	acceptTimes := accepts()
+	require.GreaterOrEqual(t, len(rejectionTimes), 2)
+	require.GreaterOrEqual(t, len(acceptTimes), 1)
+
+	secondGap := rejectionTimes[1].Sub(acceptTimes[0])
+	assert.Less(t, secondGap, time.Duration(1.5*float64(base)))
+}
+
+func TestExecuteNoCeilingLogWhenReconnectAtOrAboveCeiling(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         100,
+			RetryMaxIntervalMs:          100,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5690",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	time.Sleep(700 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	assert.NotContains(t, readLogs(), "ERROR")
 }

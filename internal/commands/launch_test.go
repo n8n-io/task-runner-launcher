@@ -1023,6 +1023,13 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 
 	logger, readLogs := captureLauncherLogs(t)
 
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "runner-started")
+	script := filepath.Join(dir, "runner.sh")
+	require.NoError(t, os.WriteFile(script,
+		[]byte("#!/bin/sh\ntrap 'exit 0' TERM\necho up > "+marker+"\nwhile true; do sleep 0.05; done\n"),
+		0o600))
+
 	cfg := &config.LauncherConfig{
 		BaseConfig: &config.BaseConfig{
 			TaskBrokerURI:               srv.URL,
@@ -1034,7 +1041,9 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 		RunnerConfigs: map[string]*config.RunnerConfig{
 			"javascript": {
 				RunnerType:            "javascript",
-				WorkDir:               t.TempDir(),
+				WorkDir:               dir,
+				Command:               "/bin/sh",
+				Args:                  []string{script},
 				HealthCheckServerPort: "5695",
 			},
 		},
@@ -1046,10 +1055,14 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
 
+	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
+		5*time.Second, 20*time.Millisecond, "launcher should launch the runner after the dial failures")
+	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("Execute did not return after the runner failed to start")
+		t.Fatal("Execute did not return after shutdown")
 	}
 
 	output := readLogs()

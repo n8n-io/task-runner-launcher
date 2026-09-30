@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
@@ -140,10 +141,9 @@ func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
 }
 
 func TestCheckUntilBrokerReadySucceedsWithBackoffEnabled(t *testing.T) {
-	requestCount := 0
+	var requestCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
-		if requestCount == 1 {
+		if requestCount.Add(1) == 1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -158,7 +158,7 @@ func TestCheckUntilBrokerReadySucceedsWithBackoffEnabled(t *testing.T) {
 	err := CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, 50*time.Millisecond, logger)
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, int32(2), requestCount.Load())
 }
 
 func TestCheckUntilBrokerReadyCancelsDuringBackoffWait(t *testing.T) {

@@ -278,9 +278,17 @@ func captureStdout(t *testing.T) func() string {
 	require.NoError(t, err)
 	os.Stdout = w
 
+	var restoreOnce sync.Once
+	restore := func() {
+		restoreOnce.Do(func() {
+			_ = w.Close()
+			os.Stdout = orig
+		})
+	}
+	t.Cleanup(restore)
+
 	return func() string {
-		_ = w.Close()
-		os.Stdout = orig
+		restore()
 		out, _ := io.ReadAll(r)
 		return string(out)
 	}

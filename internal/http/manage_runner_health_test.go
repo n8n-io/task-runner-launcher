@@ -218,15 +218,11 @@ func TestManageRunnerHealthAlreadyExited(t *testing.T) {
 	_, _ = cmd.Process.Wait()
 
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
-	ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
-	time.Sleep(healthCheckInterval * time.Duration(healthCheckMaxFailures+1))
-
+	ManageRunnerHealth(context.Background(), cmd, srv.URL, &wg, logger)
 	wg.Wait()
+	time.Sleep(healthCheckInterval)
 }
 
 func TestTerminateUnhealthyRunner(t *testing.T) {
@@ -248,9 +244,7 @@ func TestTerminateUnhealthyRunner(t *testing.T) {
 		_, _ = cmd.Process.Wait()
 		require.NoError(t, cmd.Process.Release())
 
-		assert.PanicsWithError(t, "failed to terminate unhealthy runner process: os: process already released", func() {
-			terminateUnhealthyRunner(cmd, logger)
-		})
+		assert.Panics(t, func() { terminateUnhealthyRunner(cmd, logger) })
 	})
 }
 

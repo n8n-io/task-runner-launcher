@@ -174,6 +174,10 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			return nil
 		case errors.Is(err, errs.ErrServerDown):
 			if time.Since(handshakeStart) >= stableConnectionThreshold {
+				if attempts := backoff.Attempts(); attempts >= 2 {
+					elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
+					c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
+				}
 				backoff.Reset()
 			}
 			if c.waitBeforeReconnect(ctx, &backoff,
@@ -208,7 +212,8 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 		}
 
 		if attempts := backoff.Attempts(); attempts >= 2 {
-			c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, backoff.Since().Round(time.Second))
+			elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
+			c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
 		}
 		backoff.Reset()
 

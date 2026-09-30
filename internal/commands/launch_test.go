@@ -805,6 +805,7 @@ func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
 			AuthToken:                   "test",
 			RunnerHealthCheckServerHost: host,
 			ReconnectIntervalMs:         int64(base / time.Millisecond),
+			RetryMaxIntervalMs:          int64(5 * base / time.Millisecond),
 		},
 		RunnerConfigs: map[string]*config.RunnerConfig{
 			"javascript": {
@@ -826,7 +827,7 @@ func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
 	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
 		3*time.Second, 20*time.Millisecond, "launcher should launch the runner after the first round's rejection")
 
-	require.Eventually(t, func() bool { return len(rejections()) >= 2 }, 5*time.Second, 20*time.Millisecond,
+	require.Eventually(t, func() bool { return len(accepts()) >= 2 }, 5*time.Second, 20*time.Millisecond,
 		"launcher should reject-then-accept a second round after the runner exits on its own")
 
 	cancel()
@@ -839,9 +840,9 @@ func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
 	rejectionTimes := rejections()
 	acceptTimes := accepts()
 	require.GreaterOrEqual(t, len(rejectionTimes), 2)
-	require.GreaterOrEqual(t, len(acceptTimes), 1)
+	require.GreaterOrEqual(t, len(acceptTimes), 2)
 
-	secondGap := rejectionTimes[1].Sub(acceptTimes[0])
+	secondGap := acceptTimes[1].Sub(rejectionTimes[1])
 	assert.Less(t, secondGap, time.Duration(1.5*float64(base)))
 }
 

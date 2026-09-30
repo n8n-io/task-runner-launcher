@@ -523,11 +523,19 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 	os.Stdout = w
 	os.Stderr = w
 
+	var restoreOnce sync.Once
+	restore := func() {
+		restoreOnce.Do(func() {
+			_ = w.Close()
+			os.Stdout, os.Stderr = origOut, origErr
+		})
+	}
+	t.Cleanup(restore)
+
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
 	return logger, func() string {
-		_ = w.Close()
-		os.Stdout, os.Stderr = origOut, origErr
+		restore()
 		out, _ := io.ReadAll(r)
 		return string(out)
 	}

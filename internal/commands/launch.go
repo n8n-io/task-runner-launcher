@@ -75,6 +75,28 @@ func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *log
 	cmd.WaitDelay = waitDelay
 }
 
+func (c *LaunchCommand) waitBeforeReconnect(
+	ctx context.Context,
+	backoff *retry.Backoff,
+	logWarn func(attempts int, since, delay time.Duration),
+	logCeiling func(attempts int, since, delay time.Duration),
+) bool {
+	d, justReachedCeiling := backoff.Advance()
+	attempts := backoff.Attempts()
+	since := backoff.Since().Round(time.Second)
+	delay := d.Round(time.Second)
+	if justReachedCeiling {
+		logCeiling(attempts, since, delay)
+	} else {
+		logWarn(attempts, since, delay)
+	}
+	if waitErr := retry.Wait(ctx, d); waitErr != nil {
+		c.logger.Info("Received shutdown signal, launcher will stop")
+		return true
+	}
+	return false
+}
+
 func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.LauncherConfig, runnerType string) error {
 	c.logger.Info("Starting launcher goroutine...")
 
@@ -154,32 +176,30 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			if time.Since(handshakeStart) >= stableConnectionThreshold {
 				backoff.Reset()
 			}
-			wasAtCeiling := backoff.Attempts() > 0 && backoff.AtCeiling()
-			d := backoff.Next()
-			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() {
-				c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
-					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
-			} else {
-				c.logger.Warnf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s)",
-					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
-			}
-			if waitErr := retry.Wait(ctx, d); waitErr != nil {
-				c.logger.Info("Received shutdown signal, launcher will stop")
+			if c.waitBeforeReconnect(ctx, &backoff,
+				func(attempts int, since, delay time.Duration) {
+					c.logger.Warnf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s)",
+						attempts, since, delay)
+				},
+				func(attempts int, since, delay time.Duration) {
+					c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
+						attempts, since, delay)
+				},
+			) {
 				return nil
 			}
 			continue // back to checking until broker ready
 		case errors.Is(err, errs.ErrDialFailed):
-			wasAtCeiling := backoff.Attempts() > 0 && backoff.AtCeiling()
-			d := backoff.Next()
-			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() {
-				c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
-					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
-			} else {
-				c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s)",
-					err, backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
-			}
-			if waitErr := retry.Wait(ctx, d); waitErr != nil {
-				c.logger.Info("Received shutdown signal, launcher will stop")
+			if c.waitBeforeReconnect(ctx, &backoff,
+				func(attempts int, since, delay time.Duration) {
+					c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s)",
+						err, attempts, since, delay)
+				},
+				func(attempts int, since, delay time.Duration) {
+					c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
+						attempts, since, delay)
+				},
+			) {
 				return nil
 			}
 			continue // back to checking until broker ready

@@ -55,7 +55,6 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 	if cfg.MaxWaitTimeBetweenRetries > 0 {
 		backoff = &Backoff{Base: cfg.WaitTimeBetweenRetries, Max: cfg.MaxWaitTimeBetweenRetries}
 	}
-	loggedCeiling := false
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -94,10 +93,9 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 
 		var d time.Duration
 		if backoff != nil {
-			wasAtCeiling := backoff.attempt > 0 && backoff.AtCeiling()
-			d = backoff.Next()
-			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() && !loggedCeiling {
-				loggedCeiling = true
+			var justReachedCeiling bool
+			d, justReachedCeiling = backoff.Advance()
+			if justReachedCeiling {
 				warnf(
 					"Operation `%s` retrying at ceiling: attempt %d, failing for %s, retry interval %s, last error: %v",
 					operationName,
@@ -194,6 +192,13 @@ func (b *Backoff) Next() time.Duration {
 	}
 
 	return time.Duration(delaySeconds * float64(time.Second))
+}
+
+func (b *Backoff) Advance() (time.Duration, bool) {
+	wasAtCeiling := b.attempt > 0 && b.AtCeiling()
+	d := b.Next()
+	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.AtCeiling()
+	return d, justReachedCeiling
 }
 
 func (b *Backoff) Reset() {

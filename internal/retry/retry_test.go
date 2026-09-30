@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"task-runner-launcher/internal/logs"
 	"testing"
@@ -491,6 +492,36 @@ func TestWaitReturnsPromptlyForZeroAndNegativeDuration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnlimitedRetryWithContextLogsCeilingOnce(t *testing.T) {
+	readOutput := captureStdout(t)
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	count := 0
+	_, err := UnlimitedRetryWithContext(ctx, "test-operation", 10*time.Millisecond, 40*time.Millisecond, logger, func() (string, error) {
+		count++
+		if count >= 5 {
+			return "done", nil
+		}
+		return "", errors.New("temporary error")
+	})
+	output := readOutput()
+
+	require.NoError(t, err)
+
+	warnLines := 0
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "WARN") {
+			warnLines++
+		}
+	}
+	assert.Equal(t, 1, warnLines, "reaching the ceiling should log exactly one WARN line")
+	assert.Contains(t, output, "attempt")
+	assert.Contains(t, output, "failing for")
 }
 
 func TestBackoffNoCeilingLogWhenBaseAtOrAboveMax(t *testing.T) {

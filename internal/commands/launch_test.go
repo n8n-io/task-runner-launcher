@@ -625,6 +625,114 @@ func TestExecuteDialBackoffGrowsWithEachFailure(t *testing.T) {
 	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
 }
 
+// fakeBrokerClosesConnRepeatedly accepts every websocket upgrade, then immediately
+// sends a close frame, simulating the broker closing the connection while the
+// launcher waits for a task.
+func fakeBrokerClosesConnRepeatedly(t *testing.T) (*httptest.Server, func() []time.Time) {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	var mu sync.Mutex
+	var timestamps []time.Time
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			timestamps = append(timestamps, time.Now())
+			mu.Unlock()
+			_ = conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+			conn.Close()
+		}
+	}))
+
+	getTimestamps := func() []time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]time.Time, len(timestamps))
+		copy(out, timestamps)
+		return out
+	}
+
+	return srv, getTimestamps
+}
+
+func TestExecuteServerDownBackoffGrowsWithEachReconnect(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv, getTimestamps := fakeBrokerClosesConnRepeatedly(t)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	base := 100 * time.Millisecond
+	maxWait := 600 * time.Millisecond
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         int64(base / time.Millisecond),
+			RetryMaxIntervalMs:          int64(maxWait / time.Millisecond),
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5691",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := NewLaunchCommand(logs.NewLogger(logs.InfoLevel, ""))
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool { return len(getTimestamps()) >= 4 }, 5*time.Second, 20*time.Millisecond,
+		"launcher should keep reconnecting past 4 server-down disconnects")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	timestamps := getTimestamps()
+	require.GreaterOrEqual(t, len(timestamps), 4)
+
+	gaps := make([]time.Duration, 0, len(timestamps)-1)
+	for i := 1; i < len(timestamps); i++ {
+		gaps = append(gaps, timestamps[i].Sub(timestamps[i-1]))
+	}
+
+	step := base
+	for k, gap := range gaps {
+		lowerBound := time.Duration(0.8*float64(step)) - 20*time.Millisecond
+		assert.GreaterOrEqual(t, gap, lowerBound, "gap %d too short", k+1)
+		if step < maxWait {
+			step *= 2
+			if step > maxWait {
+				step = maxWait
+			}
+		}
+	}
+	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
+}
+
 func TestExecuteDialRetryCeilingLogging(t *testing.T) {
 	origWd, err := os.Getwd()
 	require.NoError(t, err)

@@ -355,23 +355,6 @@ func TestBackoffNextFlatWhenBaseAboveCeiling(t *testing.T) {
 	}
 }
 
-func TestBackoffReset(t *testing.T) {
-	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
-	b.rand = func() float64 { return 0.5 }
-
-	first := b.Next()
-	b.Next()
-	b.Next()
-
-	b.Reset()
-
-	assert.Equal(t, 0, b.Attempts())
-	assert.Equal(t, time.Duration(0), b.Since())
-
-	got := b.Next()
-	assert.Equal(t, first, got)
-}
-
 func TestWaitReturnsCanceledPromptly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

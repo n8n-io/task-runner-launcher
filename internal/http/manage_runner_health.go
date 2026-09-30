@@ -148,7 +148,7 @@ func terminateUnhealthyRunner(cmd *exec.Cmd, logger *logs.Logger) {
 	// failing and this Kill call. Treat that as success since the
 	// goal of Kill — the process no longer running — is satisfied.
 	if errors.Is(err, os.ErrProcessDone) {
-		logger.Info("Runner process had already exited before termination; no signal sent")
+		logger.Info("Runner process had already exited, skipping termination")
 		return
 	}
 	panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))

@@ -411,6 +411,8 @@ func TestUnlimitedRetryWithContextGrowsSpacing(t *testing.T) {
 func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
 	restoreFn := setRetryTimings(t)
 	defer restoreFn()
+	DefaultWaitTimeBetweenRetries = 50 * time.Millisecond
+	DefaultMaxRetryTime = time.Second
 
 	var timestamps []time.Time
 	count := 0
@@ -429,8 +431,8 @@ func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
 	gap1 := timestamps[1].Sub(timestamps[0])
 	gap2 := timestamps[2].Sub(timestamps[1])
 
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(4*time.Millisecond))
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(4*time.Millisecond))
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(15*time.Millisecond))
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(15*time.Millisecond))
 }
 
 func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {

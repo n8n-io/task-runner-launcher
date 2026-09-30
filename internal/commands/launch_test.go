@@ -733,60 +733,117 @@ func TestExecuteServerDownBackoffGrowsWithEachReconnect(t *testing.T) {
 	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
 }
 
-func TestExecuteDialRetryCeilingLogging(t *testing.T) {
+func TestExecuteReconnectCeilingLogging(t *testing.T) {
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable)
-	defer srv.Close()
-	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
-	require.NoError(t, err)
-
-	logger, readLogs := captureLauncherLogs(t)
-
-	cfg := &config.LauncherConfig{
-		BaseConfig: &config.BaseConfig{
-			TaskBrokerURI:               srv.URL,
-			AuthToken:                   "test",
-			RunnerHealthCheckServerHost: host,
-			ReconnectIntervalMs:         20,
-			RetryMaxIntervalMs:          60,
+	tests := []struct {
+		name             string
+		newBroker        func(t *testing.T) *httptest.Server
+		reconnectMs      int64
+		retryMaxMs       int64
+		healthCheckPort  string
+		expectCeilingLog bool
+	}{
+		{
+			name:             "dial failure reaches ceiling",
+			newBroker:        func(t *testing.T) *httptest.Server { return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable) },
+			reconnectMs:      20,
+			retryMaxMs:       60,
+			healthCheckPort:  "5687",
+			expectCeilingLog: true,
 		},
-		RunnerConfigs: map[string]*config.RunnerConfig{
-			"javascript": {
-				RunnerType:            "javascript",
-				WorkDir:               t.TempDir(),
-				HealthCheckServerPort: "5687",
+		{
+			name:             "dial failure never reaches ceiling when base is at or above max",
+			newBroker:        func(t *testing.T) *httptest.Server { return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable) },
+			reconnectMs:      100,
+			retryMaxMs:       100,
+			healthCheckPort:  "5690",
+			expectCeilingLog: false,
+		},
+		{
+			name: "server down reaches ceiling",
+			newBroker: func(t *testing.T) *httptest.Server {
+				srv, _ := fakeBrokerClosesConnRepeatedly(t)
+				return srv
 			},
+			reconnectMs:      20,
+			retryMaxMs:       60,
+			healthCheckPort:  "5692",
+			expectCeilingLog: true,
+		},
+		{
+			name: "server down never reaches ceiling when base is at or above max",
+			newBroker: func(t *testing.T) *httptest.Server {
+				srv, _ := fakeBrokerClosesConnRepeatedly(t)
+				return srv
+			},
+			reconnectMs:      100,
+			retryMaxMs:       100,
+			healthCheckPort:  "5693",
+			expectCeilingLog: false,
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := NewLaunchCommand(logger)
-	done := make(chan error, 1)
-	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := tt.newBroker(t)
+			defer srv.Close()
+			host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+			require.NoError(t, err)
 
-	time.Sleep(700 * time.Millisecond)
-	cancel()
+			logger, readLogs := captureLauncherLogs(t)
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Execute did not return after shutdown")
+			cfg := &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					TaskBrokerURI:               srv.URL,
+					AuthToken:                   "test",
+					RunnerHealthCheckServerHost: host,
+					ReconnectIntervalMs:         tt.reconnectMs,
+					RetryMaxIntervalMs:          tt.retryMaxMs,
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						RunnerType:            "javascript",
+						WorkDir:               t.TempDir(),
+						HealthCheckServerPort: tt.healthCheckPort,
+					},
+				},
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cmd := NewLaunchCommand(logger)
+			done := make(chan error, 1)
+			go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+			time.Sleep(700 * time.Millisecond)
+			cancel()
+
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Execute did not return after shutdown")
+			}
+
+			output := readLogs()
+
+			errorLines := 0
+			for _, line := range strings.Split(output, "\n") {
+				if strings.Contains(line, "ERROR") {
+					errorLines++
+				}
+			}
+
+			if tt.expectCeilingLog {
+				assert.Equal(t, 1, errorLines, "reaching the ceiling should log exactly one ERROR line")
+				assert.Contains(t, output, "attempt")
+				assert.Contains(t, output, "failing for")
+			} else {
+				assert.Equal(t, 0, errorLines, "should log no ERROR line below the ceiling")
+			}
+		})
 	}
-
-	output := readLogs()
-
-	errorLines := 0
-	for _, line := range strings.Split(output, "\n") {
-		if strings.Contains(line, "ERROR") {
-			errorLines++
-		}
-	}
-	assert.Equal(t, 1, errorLines, "reaching the ceiling should log exactly one ERROR line")
-	assert.Contains(t, output, "attempt")
-	assert.Contains(t, output, "failing for")
 }
 
 func TestExecuteReconnectsCleanlyOnShutdownDuringDialBackoff(t *testing.T) {
@@ -952,50 +1009,4 @@ func TestExecuteResetsBackoffStreakAfterRunnerLaunches(t *testing.T) {
 
 	secondGap := acceptTimes[1].Sub(rejectionTimes[1])
 	assert.Less(t, secondGap, time.Duration(1.5*float64(base)))
-}
-
-func TestExecuteNoCeilingLogWhenReconnectAtOrAboveCeiling(t *testing.T) {
-	origWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() { _ = os.Chdir(origWd) }()
-
-	srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable)
-	defer srv.Close()
-	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
-	require.NoError(t, err)
-
-	logger, readLogs := captureLauncherLogs(t)
-
-	cfg := &config.LauncherConfig{
-		BaseConfig: &config.BaseConfig{
-			TaskBrokerURI:               srv.URL,
-			AuthToken:                   "test",
-			RunnerHealthCheckServerHost: host,
-			ReconnectIntervalMs:         100,
-			RetryMaxIntervalMs:          100,
-		},
-		RunnerConfigs: map[string]*config.RunnerConfig{
-			"javascript": {
-				RunnerType:            "javascript",
-				WorkDir:               t.TempDir(),
-				HealthCheckServerPort: "5690",
-			},
-		},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := NewLaunchCommand(logger)
-	done := make(chan error, 1)
-	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
-
-	time.Sleep(700 * time.Millisecond)
-	cancel()
-
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Execute did not return after shutdown")
-	}
-
-	assert.NotContains(t, readLogs(), "ERROR")
 }

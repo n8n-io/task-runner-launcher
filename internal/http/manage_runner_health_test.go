@@ -223,15 +223,35 @@ func TestManageRunnerHealthAlreadyExited(t *testing.T) {
 
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
-	// Must not panic. Before this fix, ManageRunnerHealth panicked with
-	// "failed to terminate unhealthy runner process: os: process already
-	// finished" once the unhealthy threshold was crossed.
-	assert.NotPanics(t, func() {
-		ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
-		time.Sleep(healthCheckInterval * time.Duration(healthCheckMaxFailures+1))
-	}, "ManageRunnerHealth must not panic when the runner process has already exited")
+	ManageRunnerHealth(ctx, cmd, srv.URL, &wg, logger)
+	time.Sleep(healthCheckInterval * time.Duration(healthCheckMaxFailures+1))
 
 	wg.Wait()
+}
+
+func TestTerminateUnhealthyRunner(t *testing.T) {
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	t.Run("skips termination when the process has already exited", func(t *testing.T) {
+		cmd := exec.Command("sleep", "60")
+		require.NoError(t, cmd.Start())
+		require.NoError(t, cmd.Process.Kill())
+		_, _ = cmd.Process.Wait()
+
+		assert.NotPanics(t, func() { terminateUnhealthyRunner(cmd, logger) })
+	})
+
+	t.Run("panics when the kill fails for another reason", func(t *testing.T) {
+		cmd := exec.Command("sleep", "60")
+		require.NoError(t, cmd.Start())
+		require.NoError(t, cmd.Process.Kill())
+		_, _ = cmd.Process.Wait()
+		require.NoError(t, cmd.Process.Release())
+
+		assert.PanicsWithError(t, "failed to terminate unhealthy runner process: os: process already released", func() {
+			terminateUnhealthyRunner(cmd, logger)
+		})
+	})
 }
 
 func TestContextCancellation(t *testing.T) {

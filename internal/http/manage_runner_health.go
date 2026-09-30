@@ -130,19 +130,26 @@ func ManageRunnerHealth(
 		switch result.Status {
 		case StatusUnhealthy:
 			logger.Warn("Found runner unresponsive too many times, terminating runner...")
-			if err := cmd.Process.Kill(); err != nil {
-				// The runner process may have already exited on its own
-				// (e.g. OOM-killed by the kernel) between the health check
-				// failing and this Kill call. Treat that as success since the
-				// goal of Kill — the process no longer running — is satisfied.
-				if errors.Is(err, os.ErrProcessDone) {
-					logger.Info("Runner process had already exited before termination; no signal sent")
-					break
-				}
-				panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
-			}
+			terminateUnhealthyRunner(cmd, logger)
 		case StatusMonitoringCancelled:
 			// On cancellation via context, CommandContext will terminate the process, so no action.
 		}
 	}()
+}
+
+// terminateUnhealthyRunner kills the runner process, or skips the kill if the process has already exited.
+func terminateUnhealthyRunner(cmd *exec.Cmd, logger *logs.Logger) {
+	err := cmd.Process.Kill()
+	if err == nil {
+		return
+	}
+	// The runner process may have already exited on its own
+	// (e.g. OOM-killed by the kernel) between the health check
+	// failing and this Kill call. Treat that as success since the
+	// goal of Kill — the process no longer running — is satisfied.
+	if errors.Is(err, os.ErrProcessDone) {
+		logger.Info("Runner process had already exited before termination; no signal sent")
+		return
+	}
+	panic(fmt.Errorf("failed to terminate unhealthy runner process: %v", err))
 }

@@ -3,6 +3,8 @@ package retry
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand/v2"
 	"task-runner-launcher/internal/logs"
 	"time"
 )
@@ -27,6 +29,8 @@ type retryConfig struct {
 
 	// WaitTimeBetweenRetries is the time (in seconds) to wait between retries.
 	WaitTimeBetweenRetries time.Duration
+
+	MaxWaitTimeBetweenRetries time.Duration
 }
 
 func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
@@ -42,6 +46,16 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 	if cfg.Logger != nil {
 		debugf = cfg.Logger.Debugf
 	}
+	warnf := logs.Warnf
+	if cfg.Logger != nil {
+		warnf = cfg.Logger.Warnf
+	}
+
+	var backoff *Backoff
+	if cfg.MaxWaitTimeBetweenRetries > 0 {
+		backoff = &Backoff{Base: cfg.WaitTimeBetweenRetries, Max: cfg.MaxWaitTimeBetweenRetries}
+	}
+	loggedCeiling := false
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -78,12 +92,27 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 		debugf("Attempt %d for operation `%s` failed, error: %v", attempt, operationName, err)
 		attempt++
 
-		timer := time.NewTimer(cfg.WaitTimeBetweenRetries)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return zero, ctx.Err()
-		case <-timer.C:
+		var d time.Duration
+		if backoff != nil {
+			wasAtCeiling := backoff.attempt > 0 && backoff.AtCeiling()
+			d = backoff.Next()
+			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() && !loggedCeiling {
+				loggedCeiling = true
+				warnf(
+					"Operation `%s` retrying at ceiling: attempt %d, failing for %s, retry interval %s, last error: %v",
+					operationName,
+					backoff.Attempts(),
+					backoff.Since().Round(time.Second),
+					d.Round(time.Second),
+					lastErr,
+				)
+			}
+		} else {
+			d = cfg.WaitTimeBetweenRetries
+		}
+
+		if waitErr := Wait(ctx, d); waitErr != nil {
+			return zero, waitErr
 		}
 	}
 }
@@ -102,15 +131,17 @@ func UnlimitedRetryWithContext[T any](
 	ctx context.Context,
 	operationName string,
 	waitTimeBetweenRetries time.Duration,
+	maxWaitTimeBetweenRetries time.Duration,
 	logger *logs.Logger,
 	operationFn func() (T, error),
 ) (T, error) {
 	return retry(operationName, operationFn, retryConfig{
-		Context:                ctx,
-		Logger:                 logger,
-		MaxRetryTime:           0,
-		MaxAttempts:            0,
-		WaitTimeBetweenRetries: waitTimeBetweenRetries,
+		Context:                   ctx,
+		Logger:                    logger,
+		MaxRetryTime:              0,
+		MaxAttempts:               0,
+		WaitTimeBetweenRetries:    waitTimeBetweenRetries,
+		MaxWaitTimeBetweenRetries: maxWaitTimeBetweenRetries,
 	})
 }
 
@@ -121,4 +152,78 @@ func LimitedRetry[T any](operationName string, operationFn func() (T, error)) (T
 		MaxAttempts:            DefaultMaxRetries,
 		WaitTimeBetweenRetries: DefaultWaitTimeBetweenRetries,
 	})
+}
+
+type Backoff struct {
+	Base time.Duration
+	Max  time.Duration
+
+	rand      func() float64
+	attempt   int
+	startTime time.Time
+}
+
+func (b *Backoff) effectiveCeiling() time.Duration {
+	return max(b.Max, b.Base)
+}
+
+func (b *Backoff) preJitterStepSeconds(attempt int) float64 {
+	baseSeconds := b.Base.Seconds()
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	return min(baseSeconds*math.Pow(2, float64(attempt-1)), effCeilingSeconds)
+}
+
+func (b *Backoff) Next() time.Duration {
+	if b.rand == nil {
+		b.rand = rand.Float64
+	}
+	if b.attempt == 0 {
+		b.startTime = time.Now()
+	}
+	b.attempt++
+
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	stepSeconds := b.preJitterStepSeconds(b.attempt)
+	factor := 0.8 + 0.4*b.rand()
+	delaySeconds := stepSeconds * factor
+	if delaySeconds < 0 {
+		delaySeconds = 0
+	}
+	if delaySeconds > effCeilingSeconds {
+		delaySeconds = effCeilingSeconds
+	}
+
+	return time.Duration(delaySeconds * float64(time.Second))
+}
+
+func (b *Backoff) Reset() {
+	b.attempt = 0
+	b.startTime = time.Time{}
+}
+
+func (b *Backoff) Attempts() int {
+	return b.attempt
+}
+
+func (b *Backoff) AtCeiling() bool {
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	return b.preJitterStepSeconds(b.attempt) >= effCeilingSeconds
+}
+
+func (b *Backoff) Since() time.Duration {
+	if b.startTime.IsZero() {
+		return 0
+	}
+	return time.Since(b.startTime)
+}
+
+func Wait(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

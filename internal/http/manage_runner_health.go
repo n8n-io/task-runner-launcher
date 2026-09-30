@@ -143,10 +143,7 @@ func terminateUnhealthyRunner(cmd *exec.Cmd, logger *logs.Logger) {
 	if err == nil {
 		return
 	}
-	// The runner process may have already exited on its own
-	// (e.g. OOM-killed by the kernel) between the health check
-	// failing and this Kill call. Treat that as success since the
-	// goal of Kill — the process no longer running — is satisfied.
+	// The runner can exit and be reaped between the failed health check and this call.
 	if errors.Is(err, os.ErrProcessDone) {
 		logger.Info("Runner process had already exited, skipping termination")
 		return

@@ -232,7 +232,7 @@ func TestManageRunnerHealthAlreadyExited(t *testing.T) {
 func TestTerminateUnhealthyRunner(t *testing.T) {
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
-	t.Run("skips termination when the process has already exited", func(t *testing.T) {
+	t.Run("already exited runner not killed", func(t *testing.T) {
 		cmd := exec.Command("sleep", "60")
 		require.NoError(t, cmd.Start())
 		require.NoError(t, cmd.Process.Kill())
@@ -241,7 +241,7 @@ func TestTerminateUnhealthyRunner(t *testing.T) {
 		assert.NotPanics(t, func() { terminateUnhealthyRunner(cmd, logger) })
 	})
 
-	t.Run("panics when the kill fails for another reason", func(t *testing.T) {
+	t.Run("kill error other than ErrProcessDone panics", func(t *testing.T) {
 		cmd := exec.Command("sleep", "60")
 		require.NoError(t, cmd.Start())
 		require.NoError(t, cmd.Process.Kill())

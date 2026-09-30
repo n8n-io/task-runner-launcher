@@ -57,7 +57,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			done := make(chan error)
 			go func() {
 				logger := logs.NewLogger(logs.InfoLevel, "")
-				done <- CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, logger)
+				done <- CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, 0, logger)
 			}()
 
 			select {
@@ -106,7 +106,7 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 			defer cancel()
 
 			logger := logs.NewLogger(logs.InfoLevel, "")
-			err := CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
+			err := CheckUntilBrokerReady(ctx, srv.URL, time.Hour, 0, logger)
 
 			assert.ErrorIs(t, err, context.DeadlineExceeded)
 		})
@@ -125,7 +125,7 @@ func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		logger := logs.NewLogger(logs.InfoLevel, "")
-		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
+		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, 0, logger)
 	}()
 
 	<-requestStarted
@@ -136,6 +136,52 @@ func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
 		assert.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("Broker readiness request did not stop after cancellation")
+	}
+}
+
+func TestCheckUntilBrokerReadySucceedsWithBackoffEnabled(t *testing.T) {
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	logger := logs.NewLogger(logs.InfoLevel, "")
+	err := CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, 50*time.Millisecond, logger)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+}
+
+func TestCheckUntilBrokerReadyCancelsDuringBackoffWait(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		logger := logs.NewLogger(logs.InfoLevel, "")
+		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, time.Hour, logger)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("CheckUntilBrokerReady did not stop during a backoff wait after cancellation")
 	}
 }
 

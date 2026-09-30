@@ -14,6 +14,7 @@ import (
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/retry"
 	"task-runner-launcher/internal/ws"
 	"time"
 )
@@ -25,6 +26,8 @@ const (
 	defaultRunnerGraceSeconds     = 30
 	defaultForceKillMarginSeconds = 10
 )
+
+const stableConnectionThreshold = 60 * time.Second
 
 // positiveEnvSeconds reads a positive integer from env, falling back to def.
 func positiveEnvSeconds(name string, def int) int {
@@ -94,6 +97,11 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 	// Constant for the launcher's lifetime, so compute once.
 	runnerWaitDelay := launcherShutdownTimeout()
 
+	backoff := retry.Backoff{
+		Base: time.Duration(baseConfig.ReconnectIntervalMs) * time.Millisecond,
+		Max:  time.Duration(baseConfig.RetryMaxIntervalMs) * time.Millisecond,
+	}
+
 	for {
 		// Stop relaunching once a shutdown signal has been received.
 		if ctx.Err() != nil {
@@ -107,6 +115,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			ctx,
 			baseConfig.TaskBrokerURI,
 			time.Duration(baseConfig.BrokerReadinessPollIntervalMs)*time.Millisecond,
+			time.Duration(baseConfig.RetryMaxIntervalMs)*time.Millisecond,
 			c.logger,
 		); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -133,6 +142,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			GrantToken:          launcherGrantToken,
 		}
 
+		handshakeStart := time.Now()
 		err = ws.Handshake(ctx, handshakeCfg, c.logger, runnerWaitDelay)
 		switch {
 		case errors.Is(err, errs.ErrShutdownRequested):
@@ -141,16 +151,46 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			c.logger.Info("Received shutdown signal, launcher will stop")
 			return nil
 		case errors.Is(err, errs.ErrServerDown):
-			c.logger.Warn("Task broker is down, launcher will try to reconnect...")
-			time.Sleep(time.Second * 5)
+			if time.Since(handshakeStart) >= stableConnectionThreshold {
+				backoff.Reset()
+			}
+			wasAtCeiling := backoff.Attempts() > 0 && backoff.AtCeiling()
+			d := backoff.Next()
+			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() {
+				c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
+					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
+			} else {
+				c.logger.Warnf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s)",
+					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
+			}
+			if waitErr := retry.Wait(ctx, d); waitErr != nil {
+				c.logger.Info("Received shutdown signal, launcher will stop")
+				return nil
+			}
 			continue // back to checking until broker ready
 		case errors.Is(err, errs.ErrDialFailed):
-			c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v", err)
-			time.Sleep(time.Second * 5)
+			wasAtCeiling := backoff.Attempts() > 0 && backoff.AtCeiling()
+			d := backoff.Next()
+			if backoff.Max > backoff.Base && !wasAtCeiling && backoff.AtCeiling() {
+				c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
+					backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
+			} else {
+				c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s)",
+					err, backoff.Attempts(), backoff.Since().Round(time.Second), d.Round(time.Second))
+			}
+			if waitErr := retry.Wait(ctx, d); waitErr != nil {
+				c.logger.Info("Received shutdown signal, launcher will stop")
+				return nil
+			}
 			continue // back to checking until broker ready
 		case err != nil:
 			return fmt.Errorf("handshake failed: %w", err)
 		}
+
+		if attempts := backoff.Attempts(); attempts >= 2 {
+			c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, backoff.Since().Round(time.Second))
+		}
+		backoff.Reset()
 
 		// 6. fetch grant token for runner
 

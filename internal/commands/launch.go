@@ -182,8 +182,8 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 						attempts, since, delay)
 				},
 				func(attempts int, since, delay time.Duration) {
-					c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
-						attempts, since, delay)
+					c.logger.Errorf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
+						attempts, since, delay, backoff.Max.Round(time.Second))
 				},
 			) {
 				return nil
@@ -196,8 +196,8 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 						err, attempts, since, delay)
 				},
 				func(attempts int, since, delay time.Duration) {
-					c.logger.Errorf("Task broker still unreachable after %d attempts over %s, retrying every %s",
-						attempts, since, delay)
+					c.logger.Errorf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
+						err, attempts, since, delay, backoff.Max.Round(time.Second))
 				},
 			) {
 				return nil

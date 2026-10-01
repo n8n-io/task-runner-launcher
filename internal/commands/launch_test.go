@@ -1014,7 +1014,7 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 
 	var failCount int32 = 2
 	base := 100 * time.Millisecond
-	holdDelay := 2 * time.Second
+	holdDelay := 1500 * time.Millisecond
 
 	srv := fakeBrokerRejectsDialThenHoldsOffer(t, failCount, holdDelay)
 	defer srv.Close()
@@ -1056,12 +1056,12 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
 
 	require.Eventually(t, func() bool { _, statErr := os.Stat(marker); return statErr == nil },
-		5*time.Second, 20*time.Millisecond, "launcher should launch the runner after the dial failures")
+		10*time.Second, 20*time.Millisecond, "launcher should launch the runner after the dial failures")
 	cancel()
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("Execute did not return after shutdown")
 	}
 

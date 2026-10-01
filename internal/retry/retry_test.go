@@ -410,7 +410,7 @@ func TestUnlimitedRetryWithContextGrowsSpacing(t *testing.T) {
 		if k == 0 {
 			continue
 		}
-		lowerBound := time.Duration(0.8 * float64(min(base<<uint(k), maxWait)))
+		lowerBound := time.Duration(0.8 * float64(min(base<<k, maxWait)))
 		assert.GreaterOrEqual(t, gap, lowerBound-15*time.Millisecond, "gap %d too short", k+1)
 	}
 	assert.Greater(t, gaps[len(gaps)-1], gaps[0])

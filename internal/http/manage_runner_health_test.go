@@ -197,6 +197,57 @@ func TestManageRunnerHealth(t *testing.T) {
 	}
 }
 
+// TestManageRunnerHealthAlreadyExited verifies that the launcher does not
+// panic when the runner process has already exited between the health check
+// declaring it unhealthy and the launcher attempting to terminate it. This is
+// the os.ErrProcessDone race that surfaces in production when the runner is
+// OOM-killed (or otherwise dies) just before the launcher decides to kill it.
+func TestManageRunnerHealthAlreadyExited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start(), "Failed to start dummy process")
+
+	// Reap the process so cmd.Process.Kill() returns os.ErrProcessDone, the
+	// same condition Go produces when the kernel has already collected the
+	// child between unhealthy detection and our Kill call.
+	require.NoError(t, cmd.Process.Kill(), "Failed to pre-kill dummy process")
+	_, _ = cmd.Process.Wait()
+
+	var wg sync.WaitGroup
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	ManageRunnerHealth(context.Background(), cmd, srv.URL, &wg, logger)
+	wg.Wait()
+	time.Sleep(healthCheckInterval)
+}
+
+func TestTerminateUnhealthyRunner(t *testing.T) {
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	t.Run("already exited runner not killed", func(t *testing.T) {
+		cmd := exec.Command("sleep", "60")
+		require.NoError(t, cmd.Start())
+		require.NoError(t, cmd.Process.Kill())
+		_, _ = cmd.Process.Wait()
+
+		assert.NotPanics(t, func() { terminateUnhealthyRunner(cmd, logger) })
+	})
+
+	t.Run("kill error other than ErrProcessDone panics", func(t *testing.T) {
+		cmd := exec.Command("sleep", "60")
+		require.NoError(t, cmd.Start())
+		require.NoError(t, cmd.Process.Kill())
+		_, _ = cmd.Process.Wait()
+		require.NoError(t, cmd.Process.Release())
+
+		assert.Panics(t, func() { terminateUnhealthyRunner(cmd, logger) })
+	})
+}
+
 func TestContextCancellation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

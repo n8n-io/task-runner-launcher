@@ -76,6 +76,18 @@ func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *log
 	cmd.WaitDelay = waitDelay
 }
 
+// logReconnectAndReset logs the reconnected-after-N-attempts line (when the streak
+// ran to at least 2 attempts) and resets the backoff streak. connectedFor is excluded
+// from the reported elapsed time so it covers only the failing streak, not this
+// handshake's connected time.
+func (c *LaunchCommand) logReconnectAndReset(backoff *retry.Backoff, connectedFor time.Duration) {
+	if attempts := backoff.Attempts(); attempts >= 2 {
+		elapsed := (backoff.Since() - connectedFor).Round(time.Second)
+		c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
+	}
+	backoff.Reset()
+}
+
 func (c *LaunchCommand) waitBeforeReconnect(
 	ctx context.Context,
 	backoff *retry.Backoff,
@@ -174,13 +186,8 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			c.logger.Info("Received shutdown signal, launcher will stop")
 			return nil
 		case errors.Is(err, errs.ErrServerDown):
-			if time.Since(handshakeStart) >= stableConnectionThreshold {
-				if attempts := backoff.Attempts(); attempts >= 2 {
-					// Exclude this handshake's connected time so elapsed covers only the failing streak.
-					elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
-					c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
-				}
-				backoff.Reset()
+			if connectedFor := time.Since(handshakeStart); connectedFor >= stableConnectionThreshold {
+				c.logReconnectAndReset(&backoff, connectedFor)
 			}
 			if c.waitBeforeReconnect(ctx, &backoff,
 				func(attempts int, since, delay time.Duration) {
@@ -213,12 +220,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			return fmt.Errorf("handshake failed: %w", err)
 		}
 
-		if attempts := backoff.Attempts(); attempts >= 2 {
-			// Exclude this handshake's connected time so elapsed covers only the failing streak.
-			elapsed := (backoff.Since() - time.Since(handshakeStart)).Round(time.Second)
-			c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
-		}
-		backoff.Reset()
+		c.logReconnectAndReset(&backoff, time.Since(handshakeStart))
 
 		// 6. fetch grant token for runner
 

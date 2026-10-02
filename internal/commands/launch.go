@@ -91,17 +91,17 @@ func (c *LaunchCommand) logReconnectAndReset(backoff *retry.Backoff, connectedFo
 func (c *LaunchCommand) waitBeforeReconnect(
 	ctx context.Context,
 	backoff *retry.Backoff,
-	logWarn func(attempts int, since, delay time.Duration),
-	logCeiling func(attempts int, since, delay time.Duration),
+	prefix string,
 ) bool {
 	d, justReachedCeiling := backoff.Advance()
 	attempts := backoff.Attempts()
 	since := backoff.Since().Round(time.Second)
 	delay := d.Round(time.Second)
 	if justReachedCeiling {
-		logCeiling(attempts, since, delay)
+		c.logger.Errorf("%s (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
+			prefix, attempts, since, delay, backoff.Max.Round(time.Second))
 	} else {
-		logWarn(attempts, since, delay)
+		c.logger.Warnf("%s (attempt %d, failing for %s, retrying in %s)", prefix, attempts, since, delay)
 	}
 	if waitErr := retry.Wait(ctx, d); waitErr != nil {
 		c.logger.Info("Received shutdown signal, launcher will stop")
@@ -189,30 +189,12 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			if connectedFor := time.Since(handshakeStart); connectedFor >= stableConnectionThreshold {
 				c.logReconnectAndReset(&backoff, connectedFor)
 			}
-			if c.waitBeforeReconnect(ctx, &backoff,
-				func(attempts int, since, delay time.Duration) {
-					c.logger.Warnf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s)",
-						attempts, since, delay)
-				},
-				func(attempts int, since, delay time.Duration) {
-					c.logger.Errorf("Task broker is down, launcher will try to reconnect... (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
-						attempts, since, delay, backoff.Max.Round(time.Second))
-				},
-			) {
+			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...") {
 				return nil
 			}
 			continue // back to checking until broker ready
 		case errors.Is(err, errs.ErrDialFailed):
-			if c.waitBeforeReconnect(ctx, &backoff,
-				func(attempts int, since, delay time.Duration) {
-					c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s)",
-						err, attempts, since, delay)
-				},
-				func(attempts int, since, delay time.Duration) {
-					c.logger.Errorf("Failed to connect to task broker, launcher will retry: %v (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
-						err, attempts, since, delay, backoff.Max.Round(time.Second))
-				},
-			) {
+			if c.waitBeforeReconnect(ctx, &backoff, fmt.Sprintf("Failed to connect to task broker, launcher will retry: %v", err)) {
 				return nil
 			}
 			continue // back to checking until broker ready

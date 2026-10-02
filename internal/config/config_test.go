@@ -57,6 +57,43 @@ func TestLoadConfig(t *testing.T) {
 			expectedError: false,
 		},
 		{
+			name:          "reconnect interval and retry max interval defaults",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+			},
+			runnerType:    "javascript",
+			expectedError: false,
+		},
+		{
+			name:          "reconnect interval and retry max interval overrides",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+				EnvVarReconnectInterval:       "200",
+				EnvVarRetryMaxInterval:        "1000",
+			},
+			runnerType:    "javascript",
+			expectedError: false,
+		},
+		{
+			name:          "retry max interval below broker readiness poll interval is accepted",
+			configContent: validConfigContent,
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":                                 "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
+				EnvVarRetryMaxInterval:                                   "100",
+				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "5000",
+			},
+			runnerType:    "javascript",
+			expectedError: false,
+		},
+		{
 			name:          "valid configuration",
 			configContent: validConfigContent,
 			envVars: map[string]string{
@@ -89,6 +126,16 @@ func TestLoadConfig(t *testing.T) {
 					assert.Equal(t, value, fmt.Sprint(cfg.BaseConfig.BrokerReadinessPollIntervalMs))
 				} else {
 					assert.Equal(t, int64(5000), cfg.BaseConfig.BrokerReadinessPollIntervalMs)
+				}
+				if value, ok := tt.envVars[EnvVarReconnectInterval]; ok {
+					assert.Equal(t, value, fmt.Sprint(cfg.BaseConfig.ReconnectIntervalMs))
+				} else {
+					assert.Equal(t, int64(5000), cfg.BaseConfig.ReconnectIntervalMs)
+				}
+				if value, ok := tt.envVars[EnvVarRetryMaxInterval]; ok {
+					assert.Equal(t, value, fmt.Sprint(cfg.BaseConfig.RetryMaxIntervalMs))
+				} else {
+					assert.Equal(t, int64(30000), cfg.BaseConfig.RetryMaxIntervalMs)
 				}
 			}
 		})
@@ -164,6 +211,50 @@ func TestConfigFileErrors(t *testing.T) {
 				"N8N_RUNNERS_TASK_BROKER_URI":                            "http://localhost:5679",
 				"N8N_RUNNERS_CONFIG_PATH":                                testConfigPath,
 				"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS": "9223372036855",
+			},
+		},
+		{
+			name:          "reconnect interval is too short",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_RECONNECT_INTERVAL_MS must be at least 100",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+				EnvVarReconnectInterval:       "99",
+			},
+		},
+		{
+			name:          "reconnect interval is too large",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_RECONNECT_INTERVAL_MS must not exceed 9223372036854",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+				EnvVarReconnectInterval:       "9223372036855",
+			},
+		},
+		{
+			name:          "retry max interval is too short",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS must be at least 100",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+				EnvVarRetryMaxInterval:        "99",
+			},
+		},
+		{
+			name:          "retry max interval is too large",
+			configContent: validConfigContent,
+			expectedError: "N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS must not exceed 9223372036854",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+				EnvVarRetryMaxInterval:        "9223372036855",
 			},
 		},
 	}

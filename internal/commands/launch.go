@@ -14,6 +14,7 @@ import (
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/http"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/retry"
 	"task-runner-launcher/internal/ws"
 	"time"
 )
@@ -25,6 +26,9 @@ const (
 	defaultRunnerGraceSeconds     = 30
 	defaultForceKillMarginSeconds = 10
 )
+
+// stableConnectionThreshold is how long a connection must last before its drop starts a new backoff streak instead of continuing the old one.
+const stableConnectionThreshold = 60 * time.Second
 
 // positiveEnvSeconds reads a positive integer from env, falling back to def.
 func positiveEnvSeconds(name string, def int) int {
@@ -72,6 +76,40 @@ func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *log
 	cmd.WaitDelay = waitDelay
 }
 
+// logReconnectAndReset logs the reconnected-after-N-attempts line (when the streak
+// ran to at least 2 attempts) and resets the backoff streak. connectedFor is excluded
+// from the reported elapsed time so it covers only the failing streak, not this
+// handshake's connected time.
+func (c *LaunchCommand) logReconnectAndReset(backoff *retry.Backoff, connectedFor time.Duration) {
+	if attempts := backoff.Attempts(); attempts >= 2 {
+		elapsed := (backoff.Since() - connectedFor).Round(time.Second)
+		c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
+	}
+	backoff.Reset()
+}
+
+func (c *LaunchCommand) waitBeforeReconnect(
+	ctx context.Context,
+	backoff *retry.Backoff,
+	prefix string,
+) bool {
+	d, justReachedCeiling := backoff.Advance()
+	attempts := backoff.Attempts()
+	since := backoff.Since().Round(time.Second)
+	delay := d.Round(time.Second)
+	if justReachedCeiling {
+		c.logger.Errorf("%s (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
+			prefix, attempts, since, delay, backoff.Max.Round(time.Second))
+	} else {
+		c.logger.Warnf("%s (attempt %d, failing for %s, retrying in %s)", prefix, attempts, since, delay)
+	}
+	if waitErr := retry.Wait(ctx, d); waitErr != nil {
+		c.logger.Info("Received shutdown signal, launcher will stop")
+		return true
+	}
+	return false
+}
+
 func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.LauncherConfig, runnerType string) error {
 	c.logger.Info("Starting launcher goroutine...")
 
@@ -94,6 +132,11 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 	// Constant for the launcher's lifetime, so compute once.
 	runnerWaitDelay := launcherShutdownTimeout()
 
+	backoff := retry.Backoff{
+		Base: time.Duration(baseConfig.ReconnectIntervalMs) * time.Millisecond,
+		Max:  time.Duration(baseConfig.RetryMaxIntervalMs) * time.Millisecond,
+	}
+
 	for {
 		// Stop relaunching once a shutdown signal has been received.
 		if ctx.Err() != nil {
@@ -107,6 +150,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			ctx,
 			baseConfig.TaskBrokerURI,
 			time.Duration(baseConfig.BrokerReadinessPollIntervalMs)*time.Millisecond,
+			time.Duration(baseConfig.RetryMaxIntervalMs)*time.Millisecond,
 			c.logger,
 		); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -133,6 +177,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			GrantToken:          launcherGrantToken,
 		}
 
+		handshakeStart := time.Now()
 		err = ws.Handshake(ctx, handshakeCfg, c.logger, runnerWaitDelay)
 		switch {
 		case errors.Is(err, errs.ErrShutdownRequested):
@@ -141,16 +186,23 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			c.logger.Info("Received shutdown signal, launcher will stop")
 			return nil
 		case errors.Is(err, errs.ErrServerDown):
-			c.logger.Warn("Task broker is down, launcher will try to reconnect...")
-			time.Sleep(time.Second * 5)
+			if connectedFor := time.Since(handshakeStart); connectedFor >= stableConnectionThreshold {
+				c.logReconnectAndReset(&backoff, connectedFor)
+			}
+			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...") {
+				return nil
+			}
 			continue // back to checking until broker ready
 		case errors.Is(err, errs.ErrDialFailed):
-			c.logger.Warnf("Failed to connect to task broker, launcher will retry: %v", err)
-			time.Sleep(time.Second * 5)
+			if c.waitBeforeReconnect(ctx, &backoff, fmt.Sprintf("Failed to connect to task broker, launcher will retry: %v", err)) {
+				return nil
+			}
 			continue // back to checking until broker ready
 		case err != nil:
 			return fmt.Errorf("handshake failed: %w", err)
 		}
+
+		c.logReconnectAndReset(&backoff, time.Since(handshakeStart))
 
 		// 6. fetch grant token for runner
 

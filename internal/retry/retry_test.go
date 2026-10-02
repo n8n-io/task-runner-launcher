@@ -307,7 +307,7 @@ func TestBackoffNextDoublesToCeiling(t *testing.T) {
 	}
 
 	for i, want := range expected {
-		got := b.Next()
+		got := b.next()
 		assert.Equal(t, want, got, "attempt %d", i+1)
 	}
 }
@@ -335,7 +335,7 @@ func TestBackoffNextJitterBounds(t *testing.T) {
 
 			factor := 0.8 + 0.4*tt.rand
 			for i, step := range steps {
-				got := b.Next()
+				got := b.next()
 				want := time.Duration(float64(step) * factor)
 				if want > 500*time.Millisecond {
 					want = 500 * time.Millisecond
@@ -352,7 +352,7 @@ func TestBackoffNextFlatWhenBaseAboveCeiling(t *testing.T) {
 	b.rand = func() float64 { return 0.5 }
 
 	for i := 0; i < 3; i++ {
-		got := b.Next()
+		got := b.next()
 		assert.Equal(t, time.Second, got, "attempt %d", i+1)
 	}
 }
@@ -448,29 +448,29 @@ func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {
 
 	assert.Equal(t, 0, b.Attempts())
 	assert.Equal(t, time.Duration(0), b.Since())
-	assert.False(t, b.AtCeiling())
+	assert.False(t, b.atCeiling())
 }
 
 func TestBackoffNextStaysAtCeilingAfterManyCalls(t *testing.T) {
 	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
 	b.rand = func() float64 { return 0.5 }
 
-	b.Next()
-	b.Next()
-	b.Next()
+	b.next()
+	b.next()
+	b.next()
 
 	for i := 0; i < 100; i++ {
-		got := b.Next()
+		got := b.next()
 		assert.Equal(t, 500*time.Millisecond, got, "call %d", i+1)
 	}
-	assert.True(t, b.AtCeiling())
+	assert.True(t, b.atCeiling())
 }
 
 func TestBackoffNextClampsNegativeJitterFactor(t *testing.T) {
 	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
 	b.rand = func() float64 { return -10 }
 
-	got := b.Next()
+	got := b.next()
 
 	assert.Equal(t, time.Duration(0), got)
 }

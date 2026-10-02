@@ -180,9 +180,9 @@ func (b *Backoff) preJitterStepSeconds(attempt int) float64 {
 	return min(baseSeconds*math.Pow(2, float64(attempt-1)), effCeilingSeconds)
 }
 
-// Next returns the next jittered delay and advances the attempt count,
+// next returns the next jittered delay and advances the attempt count,
 // starting the elapsed-time clock on the first call.
-func (b *Backoff) Next() time.Duration {
+func (b *Backoff) next() time.Duration {
 	if b.rand == nil {
 		b.rand = rand.Float64
 	}
@@ -208,11 +208,11 @@ func (b *Backoff) Next() time.Duration {
 // Advance returns the next delay and whether this attempt is the first to
 // reach the ceiling.
 func (b *Backoff) Advance() (time.Duration, bool) {
-	wasAtCeiling := b.attempt > 0 && b.AtCeiling()
-	d := b.Next()
+	wasAtCeiling := b.attempt > 0 && b.atCeiling()
+	d := b.next()
 	// Only report reaching the ceiling when Max is actually above Base;
 	// otherwise the delay was flat from the first attempt, never growing.
-	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.AtCeiling()
+	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.atCeiling()
 	return d, justReachedCeiling
 }
 
@@ -229,9 +229,9 @@ func (b *Backoff) Attempts() int {
 	return b.attempt
 }
 
-// AtCeiling reports whether the current attempt's step has reached the
+// atCeiling reports whether the current attempt's step has reached the
 // effective ceiling.
-func (b *Backoff) AtCeiling() bool {
+func (b *Backoff) atCeiling() bool {
 	effCeilingSeconds := b.effectiveCeiling().Seconds()
 	return b.preJitterStepSeconds(b.attempt) >= effCeilingSeconds
 }

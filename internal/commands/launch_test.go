@@ -1,10 +1,10 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -523,6 +523,21 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 	os.Stdout = w
 	os.Stderr = w
 
+	var buf bytes.Buffer
+	drain := func() {
+		_ = r.SetReadDeadline(time.Now().Add(5 * time.Millisecond))
+		tmp := make([]byte, 4096)
+		for {
+			n, readErr := r.Read(tmp)
+			if n > 0 {
+				buf.Write(tmp[:n])
+			}
+			if readErr != nil {
+				break
+			}
+		}
+	}
+
 	var restoreOnce sync.Once
 	restore := func() {
 		restoreOnce.Do(func() {
@@ -535,10 +550,27 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
 	return logger, func() string {
-		restore()
-		out, _ := io.ReadAll(r)
-		return string(out)
+		drain()
+		return buf.String()
 	}
+}
+
+func newTimestampRecorder() (record func(), get func() []time.Time) {
+	var mu sync.Mutex
+	var timestamps []time.Time
+	record = func() {
+		mu.Lock()
+		timestamps = append(timestamps, time.Now())
+		mu.Unlock()
+	}
+	get = func() []time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]time.Time, len(timestamps))
+		copy(out, timestamps)
+		return out
+	}
+	return record, get
 }
 
 // fakeBrokerClosesConnRepeatedly accepts every websocket upgrade, then immediately
@@ -547,8 +579,7 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 func fakeBrokerClosesConnRepeatedly(t *testing.T) (*httptest.Server, func() []time.Time) {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
-	var mu sync.Mutex
-	var timestamps []time.Time
+	record, getTimestamps := newTimestampRecorder()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/healthz":
@@ -561,22 +592,12 @@ func fakeBrokerClosesConnRepeatedly(t *testing.T) (*httptest.Server, func() []ti
 			if err != nil {
 				return
 			}
-			mu.Lock()
-			timestamps = append(timestamps, time.Now())
-			mu.Unlock()
+			record()
 			_ = conn.WriteControl(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 			conn.Close()
 		}
 	}))
-
-	getTimestamps := func() []time.Time {
-		mu.Lock()
-		defer mu.Unlock()
-		out := make([]time.Time, len(timestamps))
-		copy(out, timestamps)
-		return out
-	}
 
 	return srv, getTimestamps
 }
@@ -595,20 +616,8 @@ func TestExecuteBackoffGrowsWithEachFailure(t *testing.T) {
 		{
 			name: "dial failure",
 			newBroker: func(t *testing.T) (*httptest.Server, func() []time.Time) {
-				var mu sync.Mutex
-				var timestamps []time.Time
-				srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable, func() {
-					mu.Lock()
-					timestamps = append(timestamps, time.Now())
-					mu.Unlock()
-				})
-				getTimestamps := func() []time.Time {
-					mu.Lock()
-					defer mu.Unlock()
-					out := make([]time.Time, len(timestamps))
-					copy(out, timestamps)
-					return out
-				}
+				record, getTimestamps := newTimestampRecorder()
+				srv := fakeBrokerRejectsDial(t, http.StatusServiceUnavailable, record)
 				return srv, getTimestamps
 			},
 			minAttempts:     5,
@@ -696,45 +705,45 @@ func TestExecuteReconnectCeilingLogging(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		newBroker        func(t *testing.T) *httptest.Server
+		newBroker        func(t *testing.T) (*httptest.Server, func() []time.Time)
 		reconnectMs      int64
 		retryMaxMs       int64
 		healthCheckPort  string
 		expectCeilingLog bool
 	}{
 		{
-			name:             "dial failure reaches ceiling",
-			newBroker:        func(t *testing.T) *httptest.Server { return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable) },
+			name: "dial failure reaches ceiling",
+			newBroker: func(t *testing.T) (*httptest.Server, func() []time.Time) {
+				record, get := newTimestampRecorder()
+				return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable, record), get
+			},
 			reconnectMs:      20,
 			retryMaxMs:       60,
 			healthCheckPort:  "5687",
 			expectCeilingLog: true,
 		},
 		{
-			name:             "dial failure never reaches ceiling when base is at or above max",
-			newBroker:        func(t *testing.T) *httptest.Server { return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable) },
+			name: "dial failure never reaches ceiling when base is at or above max",
+			newBroker: func(t *testing.T) (*httptest.Server, func() []time.Time) {
+				record, get := newTimestampRecorder()
+				return fakeBrokerRejectsDial(t, http.StatusServiceUnavailable, record), get
+			},
 			reconnectMs:      100,
 			retryMaxMs:       100,
 			healthCheckPort:  "5690",
 			expectCeilingLog: false,
 		},
 		{
-			name: "server down reaches ceiling",
-			newBroker: func(t *testing.T) *httptest.Server {
-				srv, _ := fakeBrokerClosesConnRepeatedly(t)
-				return srv
-			},
+			name:             "server down reaches ceiling",
+			newBroker:        fakeBrokerClosesConnRepeatedly,
 			reconnectMs:      20,
 			retryMaxMs:       60,
 			healthCheckPort:  "5692",
 			expectCeilingLog: true,
 		},
 		{
-			name: "server down never reaches ceiling when base is at or above max",
-			newBroker: func(t *testing.T) *httptest.Server {
-				srv, _ := fakeBrokerClosesConnRepeatedly(t)
-				return srv
-			},
+			name:             "server down never reaches ceiling when base is at or above max",
+			newBroker:        fakeBrokerClosesConnRepeatedly,
 			reconnectMs:      100,
 			retryMaxMs:       100,
 			healthCheckPort:  "5693",
@@ -744,7 +753,7 @@ func TestExecuteReconnectCeilingLogging(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := tt.newBroker(t)
+			srv, getAttempts := tt.newBroker(t)
 			defer srv.Close()
 			host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 			require.NoError(t, err)
@@ -773,7 +782,16 @@ func TestExecuteReconnectCeilingLogging(t *testing.T) {
 			done := make(chan error, 1)
 			go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
 
-			time.Sleep(700 * time.Millisecond)
+			if tt.expectCeilingLog {
+				require.Eventually(t, func() bool {
+					return strings.Contains(readLogs(), "task broker still unreachable")
+				}, 5*time.Second, 20*time.Millisecond, "ceiling log should eventually appear")
+			} else {
+				require.Eventually(t, func() bool {
+					return len(getAttempts()) >= 5
+				}, 5*time.Second, 20*time.Millisecond, "should observe several retries without reaching the ceiling")
+			}
+			time.Sleep(150 * time.Millisecond)
 			cancel()
 
 			select {
@@ -856,9 +874,9 @@ func TestExecuteReconnectsCleanlyOnShutdownDuringDialBackoff(t *testing.T) {
 func fakeBrokerRejectsFirstUpgradePerRound(t *testing.T) (srv *httptest.Server, rejections func() []time.Time, accepts func() []time.Time) {
 	t.Helper()
 	upgrader := websocket.Upgrader{}
+	recordRejection, rejections := newTimestampRecorder()
+	recordAccept, accepts := newTimestampRecorder()
 	var mu sync.Mutex
-	var rejectionTimes []time.Time
-	var acceptTimes []time.Time
 	shouldReject := true
 
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -874,34 +892,19 @@ func fakeBrokerRejectsFirstUpgradePerRound(t *testing.T) (srv *httptest.Server, 
 			mu.Unlock()
 			if reject {
 				mu.Lock()
-				rejectionTimes = append(rejectionTimes, time.Now())
 				shouldReject = false
 				mu.Unlock()
+				recordRejection()
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
 			mu.Lock()
-			acceptTimes = append(acceptTimes, time.Now())
 			shouldReject = true
 			mu.Unlock()
+			recordAccept()
 			completeWsHandshake(t, upgrader, w, r)
 		}
 	}))
-
-	rejections = func() []time.Time {
-		mu.Lock()
-		defer mu.Unlock()
-		out := make([]time.Time, len(rejectionTimes))
-		copy(out, rejectionTimes)
-		return out
-	}
-	accepts = func() []time.Time {
-		mu.Lock()
-		defer mu.Unlock()
-		out := make([]time.Time, len(acceptTimes))
-		copy(out, acceptTimes)
-		return out
-	}
 
 	return srv, rejections, accepts
 }

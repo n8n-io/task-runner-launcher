@@ -347,6 +347,58 @@ func TestHandshakeTimeout(t *testing.T) {
 	}
 }
 
+func TestHandshakeCallsOnRegisteredBeforeOfferAccepted(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		require.NoError(t, err, "Failed to upgrade connection")
+		defer conn.Close()
+
+		require.NoError(t, conn.WriteJSON(message{Type: msgBrokerInfoRequest}))
+		var msg message
+		require.NoError(t, conn.ReadJSON(&msg), "Failed to read `runner:info`")
+		require.NoError(t, conn.WriteJSON(message{Type: msgBrokerRunnerRegistered}))
+		require.NoError(t, conn.ReadJSON(&msg), "Failed to read `runner:taskoffer`")
+
+		<-release
+		require.NoError(t, conn.WriteJSON(message{Type: msgBrokerTaskOfferAccept, TaskID: "test-task-id"}))
+		require.NoError(t, conn.ReadJSON(&msg), "Failed to read `runner:taskdeferred`")
+	}))
+	defer srv.Close()
+
+	registered := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		logger := logs.NewLogger(logs.InfoLevel, "")
+		done <- Handshake(context.Background(), HandshakeConfig{
+			TaskType:            "javascript",
+			TaskBrokerServerURI: "http://" + srv.Listener.Addr().String(),
+			GrantToken:          "test-token",
+			OnRegistered:        func() { close(registered) },
+		}, logger, 30*time.Second)
+	}()
+
+	select {
+	case <-registered:
+	case <-time.After(time.Second):
+		t.Fatal("OnRegistered was not called after the broker registered the launcher")
+	}
+
+	select {
+	case <-done:
+		t.Fatal("Handshake returned before the offer was accepted")
+	default:
+	}
+
+	close(release)
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Handshake did not return after the offer was accepted")
+	}
+}
+
 func TestHandshakeStaysAvailableThenStopsOnGraceExpiry(t *testing.T) {
 	// Server completes registration but never accepts the offer, so the launcher parks
 	// waiting — the state an idle launcher sidecar is in when a pod redeploy hits.

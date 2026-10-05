@@ -37,6 +37,7 @@ type HandshakeConfig struct {
 	TaskType            string
 	TaskBrokerServerURI string
 	GrantToken          string
+	OnRegistered        func()
 }
 
 func validateConfig(cfg HandshakeConfig) error {
@@ -154,6 +155,7 @@ func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gr
 	// nobody is receiving (e.g. after a ctx-cancelled return), avoiding a leak.
 	errReceived := make(chan error, 1)
 	handshakeComplete := make(chan struct{})
+	registered := make(chan struct{}, 1)
 
 	go func() {
 		defer close(errReceived)
@@ -205,6 +207,11 @@ func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gr
 				logger.Debugf("-> Sent message `%s` for offer ID `%s`", msg.Type, msg.OfferID)
 				logger.Info("Waiting for launcher's task offer to be accepted...")
 
+				select {
+				case registered <- struct{}{}:
+				default:
+				}
+
 			case msgBrokerTaskOfferAccept:
 				msg := message{
 					Type:   msgRunnerTaskDeferred,
@@ -235,12 +242,29 @@ func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gr
 	ctxDone := ctx.Done()
 	var graceExpired <-chan time.Time
 
+	// Runs on the caller's goroutine, and before any return, so OnRegistered is never skipped when registration and the outcome arrive together.
+	notifyRegistered := func() {
+		select {
+		case <-registered:
+			if cfg.OnRegistered != nil {
+				cfg.OnRegistered()
+			}
+		default:
+		}
+	}
+
 	for {
 		select {
 		case err := <-errReceived:
+			notifyRegistered()
 			wsConn.Close()
 			return err
+		case <-registered:
+			if cfg.OnRegistered != nil {
+				cfg.OnRegistered()
+			}
 		case <-handshakeComplete:
+			notifyRegistered()
 			logger.Debug("Runner's task offer was accepted")
 			return nil
 		case <-ctxDone:

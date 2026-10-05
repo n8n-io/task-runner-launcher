@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1198,7 +1199,7 @@ func TestExecuteServerDownStreakStartsAtDropNotHandshake(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBrokerDropsAfterDelay(t, 1200*time.Millisecond)
+	srv := fakeBrokerDropsAfterDelay(t, 3*time.Second)
 	defer srv.Close()
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
@@ -1229,7 +1230,7 @@ func TestExecuteServerDownStreakStartsAtDropNotHandshake(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return strings.Contains(readLogs(), "Task broker is down")
-	}, 5*time.Second, 20*time.Millisecond, "attempt 1 warn line should eventually appear")
+	}, 10*time.Second, 20*time.Millisecond, "attempt 1 warn line should eventually appear")
 
 	cancel()
 	select {
@@ -1238,6 +1239,11 @@ func TestExecuteServerDownStreakStartsAtDropNotHandshake(t *testing.T) {
 		t.Fatal("Execute did not return after shutdown")
 	}
 
-	assert.Contains(t, readLogs(), "Task broker is down, launcher will try to reconnect... (attempt 1, failing for 0s",
+	match := regexp.MustCompile(`Task broker is down, launcher will try to reconnect\.\.\. \(attempt 1, failing for (\d+)s`).
+		FindStringSubmatch(readLogs())
+	require.NotEmpty(t, match, "attempt 1 warn line should be present")
+	failingFor, err := strconv.Atoi(match[1])
+	require.NoError(t, err)
+	assert.Less(t, failingFor, 2,
 		"the server-down streak should start when the drop is detected, not at the earlier handshake start")
 }

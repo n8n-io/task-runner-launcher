@@ -186,10 +186,11 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			c.logger.Info("Received shutdown signal, launcher will stop")
 			return nil
 		case errors.Is(err, errs.ErrServerDown):
-			if connectedFor := time.Since(handshakeStart); connectedFor >= stableConnectionThreshold {
+			dropDetected := time.Now()
+			if connectedFor := dropDetected.Sub(handshakeStart); connectedFor >= stableConnectionThreshold {
 				c.logReconnectAndReset(&backoff, connectedFor)
 			}
-			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...", handshakeStart) {
+			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...", dropDetected) {
 				return nil
 			}
 			continue // back to checking until broker ready

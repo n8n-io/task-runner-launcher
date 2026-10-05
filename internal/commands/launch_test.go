@@ -1166,3 +1166,77 @@ func TestExecuteFailingForCountsFirstFailedAttempt(t *testing.T) {
 	assert.Contains(t, readLogs(), "attempt 1, failing for 1s",
 		"the time taken by the first failed attempt should already count towards failing for")
 }
+
+// fakeBrokerDropsAfterDelay accepts the websocket upgrade, holds the connection open for
+// delay, then closes it, simulating the broker dropping a connection that was up.
+func fakeBrokerDropsAfterDelay(t *testing.T, delay time.Duration) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			time.Sleep(delay)
+			_ = conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
+			conn.Close()
+		}
+	}))
+}
+
+func TestExecuteServerDownStreakStartsAtDropNotHandshake(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerDropsAfterDelay(t, 1200*time.Millisecond)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         100,
+			RetryMaxIntervalMs:          5000,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5697",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(readLogs(), "Task broker is down")
+	}, 5*time.Second, 20*time.Millisecond, "attempt 1 warn line should eventually appear")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	assert.Contains(t, readLogs(), "Task broker is down, launcher will try to reconnect... (attempt 1, failing for 0s",
+		"the server-down streak should start when the drop is detected, not at the earlier handshake start")
+}

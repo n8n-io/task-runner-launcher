@@ -240,9 +240,12 @@ func TestTerminateUnhealthyRunner(t *testing.T) {
 	t.Run("kill error other than ErrProcessDone panics", func(t *testing.T) {
 		cmd := exec.Command("sleep", "60")
 		require.NoError(t, cmd.Start())
-		require.NoError(t, cmd.Process.Kill())
-		_, _ = cmd.Process.Wait()
+		pid := cmd.Process.Pid
 		require.NoError(t, cmd.Process.Release())
+		t.Cleanup(func() {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			_, _ = syscall.Wait4(pid, nil, 0, nil)
+		})
 
 		assert.Panics(t, func() { terminateUnhealthyRunner(cmd, logger) })
 	})

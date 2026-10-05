@@ -77,11 +77,10 @@ func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *log
 }
 
 // logReconnectAndReset logs the reconnected-after-N-attempts line (when the streak
-// ran to at least 2 attempts) and resets the backoff streak. connectedFor is excluded
-// from the reported elapsed time so it covers only the failing streak, not this
-// handshake's connected time.
+// ran to at least 2 attempts) and resets the backoff streak.
 func (c *LaunchCommand) logReconnectAndReset(backoff *retry.Backoff, connectedFor time.Duration) {
 	if attempts := backoff.Attempts(); attempts >= 2 {
+		// connectedFor is excluded so the elapsed time covers only the failing streak, not this handshake's connected time.
 		elapsed := (backoff.Since() - connectedFor).Round(time.Second)
 		c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
 	}

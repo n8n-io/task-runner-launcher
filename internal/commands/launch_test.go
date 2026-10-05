@@ -543,6 +543,8 @@ func captureLauncherLogs(t *testing.T) (*logs.Logger, func() string) {
 		restoreOnce.Do(func() {
 			_ = w.Close()
 			os.Stdout, os.Stderr = origOut, origErr
+			drain()
+			_ = r.Close()
 		})
 	}
 	t.Cleanup(restore)

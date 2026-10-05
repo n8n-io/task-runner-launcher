@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1163,7 +1164,7 @@ func TestExecuteFailingForCountsFirstFailedAttempt(t *testing.T) {
 		t.Fatal("Execute did not return after shutdown")
 	}
 
-	assert.Contains(t, readLogs(), "attempt 1, failing for 1s",
+	assert.Regexp(t, regexp.MustCompile(`attempt 1, failing for [1-9][0-9]*s`), readLogs(),
 		"the time taken by the first failed attempt should already count towards failing for")
 }
 

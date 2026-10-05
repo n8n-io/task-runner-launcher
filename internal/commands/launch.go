@@ -91,8 +91,9 @@ func (c *LaunchCommand) waitBeforeReconnect(
 	ctx context.Context,
 	backoff *retry.Backoff,
 	prefix string,
+	attemptStart time.Time,
 ) bool {
-	d, justReachedCeiling := backoff.Advance()
+	d, justReachedCeiling := backoff.Advance(attemptStart)
 	attempts := backoff.Attempts()
 	since := backoff.Since().Round(time.Second)
 	delay := d.Round(time.Second)
@@ -188,12 +189,12 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			if connectedFor := time.Since(handshakeStart); connectedFor >= stableConnectionThreshold {
 				c.logReconnectAndReset(&backoff, connectedFor)
 			}
-			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...") {
+			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...", handshakeStart) {
 				return nil
 			}
 			continue // back to checking until broker ready
 		case errors.Is(err, errs.ErrDialFailed):
-			if c.waitBeforeReconnect(ctx, &backoff, fmt.Sprintf("Failed to connect to task broker, launcher will retry: %v", err)) {
+			if c.waitBeforeReconnect(ctx, &backoff, fmt.Sprintf("Failed to connect to task broker, launcher will retry: %v", err), handshakeStart) {
 				return nil
 			}
 			continue // back to checking until broker ready

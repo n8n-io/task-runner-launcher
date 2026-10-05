@@ -81,6 +81,30 @@ func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
 	}))
 }
 
+// fakeBrokerDialFailsOnceAfterDelay rejects the first upgrade attempt, but only after
+// delay, then behaves like fakeBroker.
+func fakeBrokerDialFailsOnceAfterDelay(t *testing.T, delay time.Duration) *httptest.Server {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	var wsAttempts int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			if atomic.AddInt32(&wsAttempts, 1) == 1 {
+				time.Sleep(delay)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			completeWsHandshake(t, upgrader, w, r)
+		}
+	}))
+}
+
 // fakeBrokerRejectsDial rejects every upgrade with the given status (a standing
 // misconfiguration, not a blip). onDialAttempt, if given, is called for every
 // rejected upgrade.
@@ -1092,4 +1116,53 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 	assert.Equal(t, int(failCount), gotAttempts)
 	assert.Less(t, gotElapsed, holdDelay,
 		"reported elapsed should exclude the time spent connected waiting for the task")
+}
+
+func TestExecuteFailingForCountsFirstFailedAttempt(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	srv := fakeBrokerDialFailsOnceAfterDelay(t, 1200*time.Millisecond)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         100,
+			RetryMaxIntervalMs:          5000,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5696",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(readLogs(), "attempt 1, failing for")
+	}, 5*time.Second, 20*time.Millisecond, "attempt 1 warn line should eventually appear")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+
+	assert.Contains(t, readLogs(), "attempt 1, failing for 1s",
+		"the time taken by the first failed attempt should already count towards failing for")
 }

@@ -81,6 +81,7 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 			)
 		}
 
+		attemptStart := time.Now()
 		result, err := operationFn()
 		if err == nil {
 			return result, nil
@@ -96,7 +97,7 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 		var d time.Duration
 		if backoff != nil {
 			var justReachedCeiling bool
-			d, justReachedCeiling = backoff.Advance()
+			d, justReachedCeiling = backoff.Advance(attemptStart)
 			if justReachedCeiling {
 				warnf(
 					"Operation `%s` retrying at ceiling: attempt %d, failing for %s, retry interval %s, last error: %v",
@@ -206,10 +207,17 @@ func (b *Backoff) next() time.Duration {
 }
 
 // Advance returns the next delay and whether this attempt is the first to
-// reach the ceiling.
-func (b *Backoff) Advance() (time.Duration, bool) {
+// reach the ceiling. attemptStart is the start time of the attempt that just
+// failed; on the first call of a streak it backdates the elapsed-time clock
+// to that time instead of now, so the streak's first failed attempt counts
+// towards Since. Later calls ignore it.
+func (b *Backoff) Advance(attemptStart time.Time) (time.Duration, bool) {
 	wasAtCeiling := b.attempt > 0 && b.atCeiling()
+	firstCall := b.attempt == 0
 	d := b.next()
+	if firstCall {
+		b.startTime = attemptStart
+	}
 	// Only report reaching the ceiling when Max is actually above Base;
 	// otherwise the delay was flat from the first attempt, never growing.
 	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.atCeiling()

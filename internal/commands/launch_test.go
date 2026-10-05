@@ -1120,6 +1120,58 @@ func TestExecuteReconnectedLogExcludesConnectedWait(t *testing.T) {
 		"reported elapsed should exclude the time spent connected waiting for the task")
 }
 
+func TestExecuteLogsReconnectedOnRegistrationBeforeOfferAccepted(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func() { _ = os.Chdir(origWd) }()
+
+	t.Setenv("N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT", "1")
+
+	var failCount int32 = 2
+	holdDelay := 3 * time.Second
+
+	srv := fakeBrokerRejectsDialThenHoldsOffer(t, failCount, holdDelay)
+	defer srv.Close()
+	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+
+	logger, readLogs := captureLauncherLogs(t)
+
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:               srv.URL,
+			AuthToken:                   "test",
+			RunnerHealthCheckServerHost: host,
+			ReconnectIntervalMs:         100,
+			RetryMaxIntervalMs:          5000,
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {
+				RunnerType:            "javascript",
+				WorkDir:               t.TempDir(),
+				HealthCheckServerPort: "5698",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := NewLaunchCommand(logger)
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute(ctx, cfg, "javascript") }()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(readLogs(), fmt.Sprintf("Reconnected to task broker after %d attempts", failCount))
+	}, 2*time.Second, 20*time.Millisecond, "reconnected line should be logged once registered, before the offer is accepted")
+
+	cancel()
+	select {
+	case execErr := <-done:
+		assert.NoError(t, execErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Execute did not return after shutdown")
+	}
+}
+
 func TestExecuteFailingForCountsFirstFailedAttempt(t *testing.T) {
 	origWd, err := os.Getwd()
 	require.NoError(t, err)

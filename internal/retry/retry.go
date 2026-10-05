@@ -223,7 +223,7 @@ func (b *Backoff) Reset() {
 	b.startTime = time.Time{}
 }
 
-// Attempts returns the number of Next calls since construction or the last
+// Attempts returns the number of Advance calls since construction or the last
 // Reset.
 func (b *Backoff) Attempts() int {
 	return b.attempt
@@ -236,8 +236,8 @@ func (b *Backoff) atCeiling() bool {
 	return b.preJitterStepSeconds(b.attempt) >= effCeilingSeconds
 }
 
-// Since returns the elapsed time since the first Next call, or 0 if Next has
-// not been called.
+// Since returns the elapsed time since the first Advance call, or 0 if Advance
+// has not been called.
 func (b *Backoff) Since() time.Duration {
 	if b.startTime.IsZero() {
 		return 0

@@ -3,11 +3,16 @@ package retry
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
+	"strings"
+	"sync"
 	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setRetryTimings(t *testing.T) func() {
@@ -94,7 +99,7 @@ func TestUnlimitedRetryWithContext(t *testing.T) {
 	logger := logs.NewLogger(logs.InfoLevel, "")
 
 	go func() {
-		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, logger, func() (string, error) {
+		_, err := UnlimitedRetryWithContext(ctx, "test-operation", time.Hour, 0, logger, func() (string, error) {
 			close(attempted)
 			return "", errors.New("temporary error")
 		})
@@ -264,4 +269,283 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "test", result.value)
 	})
+}
+
+func captureStdout(t *testing.T) func() string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	var restoreOnce sync.Once
+	restore := func() {
+		restoreOnce.Do(func() {
+			_ = w.Close()
+			os.Stdout = orig
+		})
+	}
+	t.Cleanup(restore)
+
+	return func() string {
+		restore()
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+}
+
+func TestBackoffNextDoublesToCeiling(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+	b.rand = func() float64 { return 0.5 }
+
+	expected := []time.Duration{
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+		400 * time.Millisecond,
+		500 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+
+	for i, want := range expected {
+		got := b.next()
+		assert.Equal(t, want, got, "attempt %d", i+1)
+	}
+}
+
+func TestBackoffNextJitterBounds(t *testing.T) {
+	steps := []time.Duration{
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+		400 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+
+	tests := []struct {
+		name string
+		rand float64
+	}{
+		{name: "rand at 0 gives 0.8x step", rand: 0},
+		{name: "rand just below 1 gives ~1.2x step", rand: 0.999999},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+			b.rand = func() float64 { return tt.rand }
+
+			factor := 0.8 + 0.4*tt.rand
+			for i, step := range steps {
+				got := b.next()
+				want := time.Duration(float64(step) * factor)
+				if want > 500*time.Millisecond {
+					want = 500 * time.Millisecond
+				}
+				assert.InDelta(t, float64(want), float64(got), float64(2*time.Millisecond), "attempt %d", i+1)
+				assert.LessOrEqual(t, got, 500*time.Millisecond)
+			}
+		})
+	}
+}
+
+func TestBackoffNextFlatWhenBaseAboveCeiling(t *testing.T) {
+	b := &Backoff{Base: time.Second, Max: 100 * time.Millisecond}
+	b.rand = func() float64 { return 0.5 }
+
+	for i := 0; i < 3; i++ {
+		got := b.next()
+		assert.Equal(t, time.Second, got, "attempt %d", i+1)
+	}
+}
+
+func TestWaitReturnsCanceledPromptly(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- Wait(ctx, time.Hour)
+	}()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Wait did not return promptly after cancellation")
+	}
+}
+
+func TestUnlimitedRetryWithContextGrowsSpacing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	base := 10 * time.Millisecond
+	maxWait := 40 * time.Millisecond
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	var mu sync.Mutex
+	var timestamps []time.Time
+	attempt := 0
+
+	_, err := UnlimitedRetryWithContext(ctx, "test-operation", base, maxWait, logger, func() (string, error) {
+		mu.Lock()
+		timestamps = append(timestamps, time.Now())
+		attempt++
+		n := attempt
+		mu.Unlock()
+		if n >= 5 {
+			return "done", nil
+		}
+		return "", errors.New("temporary error")
+	})
+
+	require.NoError(t, err)
+	require.Len(t, timestamps, 5)
+
+	gaps := make([]time.Duration, 0, 4)
+	for i := 1; i < len(timestamps); i++ {
+		gaps = append(gaps, timestamps[i].Sub(timestamps[i-1]))
+	}
+
+	for k, gap := range gaps {
+		if k == 0 {
+			continue
+		}
+		lowerBound := time.Duration(0.8 * float64(min(base<<k, maxWait)))
+		assert.GreaterOrEqual(t, gap, lowerBound-15*time.Millisecond, "gap %d too short", k+1)
+	}
+	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
+}
+
+func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
+	restoreFn := setRetryTimings(t)
+	defer restoreFn()
+	DefaultWaitTimeBetweenRetries = 50 * time.Millisecond
+	DefaultMaxRetryTime = time.Second
+
+	var timestamps []time.Time
+	count := 0
+	_, err := UnlimitedRetry("test-operation", func() (string, error) {
+		timestamps = append(timestamps, time.Now())
+		count++
+		if count >= 3 {
+			return "done", nil
+		}
+		return "", errors.New("temporary error")
+	})
+
+	require.NoError(t, err)
+	require.Len(t, timestamps, 3)
+
+	gap1 := timestamps[1].Sub(timestamps[0])
+	gap2 := timestamps[2].Sub(timestamps[1])
+
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(15*time.Millisecond))
+	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(15*time.Millisecond))
+}
+
+func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+
+	assert.Equal(t, 0, b.Attempts())
+	assert.Equal(t, time.Duration(0), b.Since())
+	assert.False(t, b.atCeiling())
+}
+
+func TestBackoffNextStaysAtCeilingAfterManyCalls(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+	b.rand = func() float64 { return 0.5 }
+
+	b.next()
+	b.next()
+	b.next()
+
+	for i := 0; i < 100; i++ {
+		got := b.next()
+		assert.Equal(t, 500*time.Millisecond, got, "call %d", i+1)
+	}
+	assert.True(t, b.atCeiling())
+}
+
+func TestBackoffNextClampsNegativeJitterFactor(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+	b.rand = func() float64 { return -10 }
+
+	got := b.next()
+
+	assert.Equal(t, time.Duration(0), got)
+}
+
+func TestWaitReturnsPromptlyForZeroAndNegativeDuration(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+	}{
+		{name: "zero duration", d: 0},
+		{name: "negative duration", d: -time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			done := make(chan error, 1)
+			go func() { done <- Wait(ctx, tt.d) }()
+
+			select {
+			case err := <-done:
+				assert.NoError(t, err)
+			case <-time.After(50 * time.Millisecond):
+				t.Fatal("Wait did not return promptly")
+			}
+		})
+	}
+}
+
+func TestUnlimitedRetryWithContextLogsCeilingOnce(t *testing.T) {
+	readOutput := captureStdout(t)
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	count := 0
+	_, err := UnlimitedRetryWithContext(ctx, "test-operation", 10*time.Millisecond, 40*time.Millisecond, logger, func() (string, error) {
+		count++
+		if count >= 5 {
+			return "done", nil
+		}
+		return "", errors.New("temporary error")
+	})
+	output := readOutput()
+
+	require.NoError(t, err)
+
+	warnLines := 0
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "WARN") {
+			warnLines++
+		}
+	}
+	assert.Equal(t, 1, warnLines, "reaching the ceiling should log exactly one WARN line")
+	assert.Contains(t, output, "attempt")
+	assert.Contains(t, output, "failing for")
+}
+
+func TestBackoffNoCeilingLogWhenBaseAtOrAboveMax(t *testing.T) {
+	readOutput := captureStdout(t)
+	logger := logs.NewLogger(logs.InfoLevel, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	count := 0
+	_, err := UnlimitedRetryWithContext(ctx, "test-operation", 200*time.Millisecond, 100*time.Millisecond, logger, func() (string, error) {
+		count++
+		if count >= 3 {
+			return "done", nil
+		}
+		return "", errors.New("temporary error")
+	})
+	output := readOutput()
+
+	require.NoError(t, err)
+	assert.NotContains(t, output, "WARN")
 }

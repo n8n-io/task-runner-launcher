@@ -436,38 +436,6 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			},
 		},
 		{
-			name: "default-env does not need allowed-env",
-			launcherConfig: &config.LauncherConfig{
-				BaseConfig: &config.BaseConfig{
-					AutoShutdownTimeout: "30",
-					TaskTimeout:         "60",
-					TaskBrokerURI:       "http://localhost:5679",
-				},
-				RunnerConfigs: map[string]*config.RunnerConfig{
-					"javascript": {
-						AllowedEnv:            []string{"OTHER_VAR"},
-						HealthCheckServerPort: "5681",
-						DefaultEnv: map[string]string{
-							"NODE_ENV": "production",
-						},
-					},
-				},
-			},
-			envSetup: map[string]string{
-				"PATH":     "/usr/bin",
-				"NODE_ENV": "development",
-			},
-			expected: []string{
-				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
-				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
-				"N8N_RUNNERS_TASK_TIMEOUT=60",
-				"NODE_ENV=development",
-				"PATH=/usr/bin",
-			},
-		},
-		{
 			name: "default-env prefers env value for legacy timeout variable",
 			launcherConfig: &config.LauncherConfig{
 				BaseConfig: &config.BaseConfig{

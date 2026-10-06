@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
-	"slices"
 	"strconv"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
@@ -237,10 +235,8 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 }
 
 func validateEnvKeyConflicts(runnerConfigs map[string]*RunnerConfig) error {
-	for _, runnerType := range slices.Sorted(maps.Keys(runnerConfigs)) {
-		config := runnerConfigs[runnerType]
-
-		for _, key := range slices.Sorted(maps.Keys(config.DefaultEnv)) {
+	for runnerType, config := range runnerConfigs {
+		for key := range config.DefaultEnv {
 			if _, exists := config.EnvOverrides[key]; exists {
 				return fmt.Errorf("runner %s: %s is set in both default-env and env-overrides", runnerType, key)
 			}

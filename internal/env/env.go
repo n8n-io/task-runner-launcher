@@ -2,7 +2,6 @@ package env
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -128,12 +127,11 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, baseConfig.TaskTimeout))
 
-	for _, key := range slices.Sorted(maps.Keys(runnerConfig.DefaultEnv)) {
+	for key, value := range runnerConfig.DefaultEnv {
 		if slices.Contains(requiredRuntimeEnvVars, key) {
 			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
 			continue
 		}
-		value := runnerConfig.DefaultEnv[key]
 		if launcherValue, present := os.LookupEnv(key); present {
 			value = launcherValue
 		}

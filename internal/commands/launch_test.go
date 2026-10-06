@@ -585,7 +585,10 @@ func registerAfter(d time.Duration) wsHandler {
 		_ = conn.ReadJSON(&msg)
 		time.Sleep(d)
 		_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
-		for conn.ReadJSON(&msg) == nil {
+		for {
+			if conn.ReadJSON(&msg) != nil {
+				return
+			}
 		}
 	}
 }

@@ -97,6 +97,9 @@ type RunnerConfig struct {
 
 	// Env vars for the launcher to set directly on the runner.
 	EnvOverrides map[string]string `json:"env-overrides"`
+
+	// Env vars for the launcher to set on the runner unless the launcher's own environment sets them.
+	DefaultEnv map[string]string `json:"default-env"`
 }
 
 // LoadLauncherConfig loads the launcher's base config from the launcher's environment and

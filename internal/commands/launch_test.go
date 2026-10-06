@@ -445,6 +445,43 @@ func TestExecuteStopsDuringBrokerReadiness(t *testing.T) {
 	}
 }
 
+func TestExecuteBacksOffBrokerReadinessUpToTheRetryCeiling(t *testing.T) {
+	origWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	logger, readLogs := captureLauncherLogs(t)
+	cfg := &config.LauncherConfig{
+		BaseConfig: &config.BaseConfig{
+			TaskBrokerURI:                 srv.URL,
+			AuthToken:                     "test",
+			BrokerReadinessPollIntervalMs: 10,
+			RetryMaxIntervalMs:            40,
+			RunnerHealthCheckServerHost:   "127.0.0.1",
+		},
+		RunnerConfigs: map[string]*config.RunnerConfig{
+			"javascript": {RunnerType: "javascript", WorkDir: t.TempDir(), HealthCheckServerPort: "5687"},
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- NewLaunchCommand(logger).Execute(ctx, cfg, "javascript") }()
+
+	waitForLog(t, readLogs, "Operation `readiness-check` retrying at ceiling", 1)
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Execute did not stop during broker readiness checks")
+	}
+}
+
 func TestLauncherShutdownTimeout(t *testing.T) {
 	defaultTimeout := time.Duration(defaultRunnerGraceSeconds+2*defaultForceKillMarginSeconds) * time.Second
 

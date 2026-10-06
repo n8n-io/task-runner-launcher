@@ -137,6 +137,7 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
 			continue
 		}
+		// A config must not be able to forward the launcher's auth token to a runner.
 		if key == EnvVarAuthToken {
 			logger.Warnf("Disregarded default-env for launcher-only variable: %s", key)
 			continue

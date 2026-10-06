@@ -2,6 +2,7 @@ package env
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -126,6 +127,19 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 	// TODO: The next two lines are legacy behavior to remove after deprecation period.
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, baseConfig.TaskTimeout))
+
+	for _, key := range slices.Sorted(maps.Keys(runnerConfig.DefaultEnv)) {
+		if slices.Contains(requiredRuntimeEnvVars, key) {
+			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
+			continue
+		}
+		value := runnerConfig.DefaultEnv[key]
+		if launcherValue, present := os.LookupEnv(key); present {
+			value = launcherValue
+		}
+		runnerEnv = Clear(runnerEnv, key)
+		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
+	}
 
 	for key, value := range runnerConfig.EnvOverrides {
 		if slices.Contains(requiredRuntimeEnvVars, key) {

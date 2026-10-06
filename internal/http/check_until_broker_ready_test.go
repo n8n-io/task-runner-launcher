@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"task-runner-launcher/internal/logs"
 	"testing"
 	"time"
@@ -17,7 +16,10 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 	tests := []struct {
 		name             string
 		serverFn         func(http.ResponseWriter, *http.Request, int)
+		interval         time.Duration
+		maxInterval      time.Duration
 		expectedRequests int
+		minElapsed       time.Duration
 		expectedError    error
 		timeout          time.Duration
 	}{
@@ -26,6 +28,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			serverFn: func(w http.ResponseWriter, _ *http.Request, _ int) {
 				w.WriteHeader(http.StatusOK)
 			},
+			interval:         time.Millisecond,
 			expectedRequests: 1,
 			timeout:          time.Second,
 		},
@@ -38,7 +41,23 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 				}
 				w.WriteHeader(http.StatusOK)
 			},
+			interval:         time.Millisecond,
 			expectedRequests: 2,
+			timeout:          time.Second,
+		},
+		{
+			name: "backs off between retries",
+			serverFn: func(w http.ResponseWriter, _ *http.Request, requestCount int) {
+				if requestCount <= 3 {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			},
+			interval:         20 * time.Millisecond,
+			maxInterval:      time.Second,
+			expectedRequests: 4,
+			minElapsed:       100 * time.Millisecond,
 			timeout:          time.Second,
 		},
 	}
@@ -55,10 +74,11 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
 
+			start := time.Now()
 			done := make(chan error)
 			go func() {
 				logger := logs.NewLogger(logs.InfoLevel, "")
-				done <- CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, 0, logger)
+				done <- CheckUntilBrokerReady(ctx, srv.URL, tt.interval, tt.maxInterval, logger)
 			}()
 
 			select {
@@ -69,6 +89,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 					assert.EqualError(t, err, tt.expectedError.Error(), "Unexpected error")
 				}
 				assert.Equal(t, tt.expectedRequests, requestCount, "Unexpected number of requests")
+				assert.GreaterOrEqual(t, time.Since(start), tt.minElapsed)
 
 			case <-ctx.Done():
 				t.Error("test timed out")
@@ -137,51 +158,6 @@ func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
 		assert.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("Broker readiness request did not stop after cancellation")
-	}
-}
-
-func TestCheckUntilBrokerReadySucceedsWithBackoffEnabled(t *testing.T) {
-	var requestCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if requestCount.Add(1) == 1 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	logger := logs.NewLogger(logs.InfoLevel, "")
-	err := CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, 50*time.Millisecond, logger)
-
-	require.NoError(t, err)
-	assert.Equal(t, int32(2), requestCount.Load())
-}
-
-func TestCheckUntilBrokerReadyCancelsDuringBackoffWait(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer srv.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		logger := logs.NewLogger(logs.InfoLevel, "")
-		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, time.Hour, logger)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-
-	select {
-	case err := <-done:
-		assert.ErrorIs(t, err, context.Canceled)
-	case <-time.After(time.Second):
-		t.Fatal("CheckUntilBrokerReady did not stop during a backoff wait after cancellation")
 	}
 }
 

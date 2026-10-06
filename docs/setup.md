@@ -58,6 +58,7 @@ For an example, refer to the [config file](https://github.com/n8n-io/n8n/blob/ma
 | `health-check-server-port` | Port for the runner's health check server. When a single runner is configured, this is optional and defaults to `5681`. When multiple runners are configured, this is required and must be unique per runner.
 | `allowed-env`   | Env vars that the launcher will pass through from its own environment to the runner. See [environment variables](#environment-variables).
 | `env-overrides` | Env vars that the launcher will set directly on the runner. See [environment variables](#environment-variables).
+| `default-env`   | Env vars that the launcher will set on the runner unless its own environment sets them. See [environment variables](#environment-variables).
 
 ## Environment variables
 
@@ -78,12 +79,15 @@ The runner force-exits itself at `grace + margin`; the launcher waits one furthe
 
 Ensure your orchestrator's termination grace period (e.g. k8s `terminationGracePeriodSeconds`) is at least as large as this value, so the runner is not killed before it can drain.
 
-The launcher can pass env vars to task runners in two ways, as specified in the [config file](#config-file):
+The launcher can pass env vars to task runners in three ways, as specified in the [config file](#config-file):
 
 | Source | Description | Purpose |
 |--------|-------------|------------|
 | `allowed-env` | Env vars filtered from the launcher's own environment | Passing env vars common to all runner types |
 | `env-overrides` | Env vars set by the launcher directly on the runner, with precedence over `allowed-env` | Passing env vars specific to a single runner type |
+| `default-env` | Env vars set by the launcher on the runner, with the launcher's own environment taking precedence | Defaults that users may override from the runner container's environment |
+
+`env-overrides` take precedence over `default-env`, and a key may not appear in both.
 
 Exceptionally, these four env vars cannot be disallowed or overridden:
 

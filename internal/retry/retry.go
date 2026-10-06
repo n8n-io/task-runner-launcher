@@ -3,6 +3,8 @@ package retry
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand/v2"
 	"task-runner-launcher/internal/logs"
 	"time"
 )
@@ -27,6 +29,10 @@ type retryConfig struct {
 
 	// WaitTimeBetweenRetries is the time (in seconds) to wait between retries.
 	WaitTimeBetweenRetries time.Duration
+
+	// MaxWaitTimeBetweenRetries is the ceiling for the growing delay between
+	// retries. Set to 0 to keep a flat WaitTimeBetweenRetries delay.
+	MaxWaitTimeBetweenRetries time.Duration
 }
 
 func retry[T any](operationName string, operationFn func() (T, error), cfg retryConfig) (T, error) {
@@ -41,6 +47,15 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 	debugf := logs.Debugf
 	if cfg.Logger != nil {
 		debugf = cfg.Logger.Debugf
+	}
+	warnf := logs.Warnf
+	if cfg.Logger != nil {
+		warnf = cfg.Logger.Warnf
+	}
+
+	var backoff *Backoff
+	if cfg.MaxWaitTimeBetweenRetries > 0 {
+		backoff = &Backoff{Base: cfg.WaitTimeBetweenRetries, Max: cfg.MaxWaitTimeBetweenRetries}
 	}
 
 	for {
@@ -66,6 +81,7 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 			)
 		}
 
+		attemptStart := time.Now()
 		result, err := operationFn()
 		if err == nil {
 			return result, nil
@@ -78,12 +94,26 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 		debugf("Attempt %d for operation `%s` failed, error: %v", attempt, operationName, err)
 		attempt++
 
-		timer := time.NewTimer(cfg.WaitTimeBetweenRetries)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return zero, ctx.Err()
-		case <-timer.C:
+		var d time.Duration
+		if backoff != nil {
+			var justReachedCeiling bool
+			d, justReachedCeiling = backoff.Advance(attemptStart)
+			if justReachedCeiling {
+				warnf(
+					"Operation `%s` retrying at ceiling: attempt %d, failing for %s, retry interval %s, last error: %v",
+					operationName,
+					backoff.Attempts(),
+					backoff.Since().Round(time.Second),
+					d.Round(time.Second),
+					lastErr,
+				)
+			}
+		} else {
+			d = cfg.WaitTimeBetweenRetries
+		}
+
+		if waitErr := Wait(ctx, d); waitErr != nil {
+			return zero, waitErr
 		}
 	}
 }
@@ -102,15 +132,17 @@ func UnlimitedRetryWithContext[T any](
 	ctx context.Context,
 	operationName string,
 	waitTimeBetweenRetries time.Duration,
+	maxWaitTimeBetweenRetries time.Duration,
 	logger *logs.Logger,
 	operationFn func() (T, error),
 ) (T, error) {
 	return retry(operationName, operationFn, retryConfig{
-		Context:                ctx,
-		Logger:                 logger,
-		MaxRetryTime:           0,
-		MaxAttempts:            0,
-		WaitTimeBetweenRetries: waitTimeBetweenRetries,
+		Context:                   ctx,
+		Logger:                    logger,
+		MaxRetryTime:              0,
+		MaxAttempts:               0,
+		WaitTimeBetweenRetries:    waitTimeBetweenRetries,
+		MaxWaitTimeBetweenRetries: maxWaitTimeBetweenRetries,
 	})
 }
 
@@ -121,4 +153,114 @@ func LimitedRetry[T any](operationName string, operationFn func() (T, error)) (T
 		MaxAttempts:            DefaultMaxRetries,
 		WaitTimeBetweenRetries: DefaultWaitTimeBetweenRetries,
 	})
+}
+
+// Backoff computes a jittered exponential delay between retries, capped at
+// Max (or Base, if larger).
+type Backoff struct {
+	Base time.Duration
+	Max  time.Duration
+
+	rand      func() float64
+	attempt   int
+	startTime time.Time
+}
+
+// effectiveCeiling is Max, or Base when Base is the larger of the two, so a
+// Base above the configured ceiling still gives a flat delay.
+func (b *Backoff) effectiveCeiling() time.Duration {
+	return max(b.Max, b.Base)
+}
+
+// preJitterStepSeconds is computed in float64 seconds because doubling in
+// time.Duration would overflow for a long streak; the result is clamped to
+// the ceiling before any conversion back to a Duration.
+func (b *Backoff) preJitterStepSeconds(attempt int) float64 {
+	baseSeconds := b.Base.Seconds()
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	return min(baseSeconds*math.Pow(2, float64(attempt-1)), effCeilingSeconds)
+}
+
+// next returns the next jittered delay and advances the attempt count,
+// starting the elapsed-time clock on the first call.
+func (b *Backoff) next() time.Duration {
+	if b.rand == nil {
+		b.rand = rand.Float64
+	}
+	if b.attempt == 0 {
+		b.startTime = time.Now()
+	}
+	b.attempt++
+
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	stepSeconds := b.preJitterStepSeconds(b.attempt)
+	factor := 0.8 + 0.4*b.rand()
+	delaySeconds := stepSeconds * factor
+	if delaySeconds < 0 {
+		delaySeconds = 0
+	}
+	if delaySeconds > effCeilingSeconds {
+		delaySeconds = effCeilingSeconds
+	}
+
+	return time.Duration(delaySeconds * float64(time.Second))
+}
+
+// Advance returns the next delay and whether this attempt is the first to
+// reach the ceiling. attemptStart is the start time of the attempt that just
+// failed; on the first call of a streak it backdates the elapsed-time clock
+// to that time instead of now, so the streak's first failed attempt counts
+// towards Since. Later calls ignore it.
+func (b *Backoff) Advance(attemptStart time.Time) (time.Duration, bool) {
+	wasAtCeiling := b.attempt > 0 && b.atCeiling()
+	firstCall := b.attempt == 0
+	d := b.next()
+	if firstCall {
+		b.startTime = attemptStart
+	}
+	// Only report reaching the ceiling when Max is actually above Base;
+	// otherwise the delay was flat from the first attempt, never growing.
+	justReachedCeiling := b.Max > b.Base && !wasAtCeiling && b.atCeiling()
+	return d, justReachedCeiling
+}
+
+// Reset clears the attempt count and elapsed time, returning the next delay
+// to the base step.
+func (b *Backoff) Reset() {
+	b.attempt = 0
+	b.startTime = time.Time{}
+}
+
+// Attempts returns the number of Advance calls since construction or the last
+// Reset.
+func (b *Backoff) Attempts() int {
+	return b.attempt
+}
+
+// atCeiling reports whether the current attempt's step has reached the
+// effective ceiling.
+func (b *Backoff) atCeiling() bool {
+	effCeilingSeconds := b.effectiveCeiling().Seconds()
+	return b.preJitterStepSeconds(b.attempt) >= effCeilingSeconds
+}
+
+// Since returns the elapsed time since the first Advance call, or 0 if Advance
+// has not been called.
+func (b *Backoff) Since() time.Duration {
+	if b.startTime.IsZero() {
+		return 0
+	}
+	return time.Since(b.startTime)
+}
+
+// Wait blocks until d elapses or ctx is done, returning ctx.Err() on cancellation.
+func Wait(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

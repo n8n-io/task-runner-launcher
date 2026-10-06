@@ -534,3 +534,23 @@ func TestUnlimitedRetryWithContextBackoff(t *testing.T) {
 		})
 	}
 }
+
+func TestRoundForLog(t *testing.T) {
+	tests := []struct {
+		in   time.Duration
+		want string
+	}{
+		{in: 0, want: "0s"},
+		{in: 400*time.Millisecond + 600*time.Microsecond, want: "401ms"},
+		{in: 999 * time.Millisecond, want: "999ms"},
+		{in: time.Second, want: "1s"},
+		{in: 12*time.Second + 400*time.Millisecond, want: "12s"},
+		{in: 90 * time.Second, want: "1m30s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, RoundForLog(tt.in).String())
+		})
+	}
+}

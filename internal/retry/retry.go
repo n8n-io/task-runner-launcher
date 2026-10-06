@@ -103,8 +103,8 @@ func retry[T any](operationName string, operationFn func() (T, error), cfg retry
 					"Operation `%s` retrying at ceiling: attempt %d, failing for %s, retry interval %s, last error: %v",
 					operationName,
 					backoff.Attempts(),
-					backoff.Since().Round(time.Second),
-					d.Round(time.Second),
+					RoundForLog(backoff.Since()),
+					RoundForLog(d),
 					lastErr,
 				)
 			}
@@ -263,4 +263,12 @@ func Wait(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+// RoundForLog rounds d to whole seconds, or to milliseconds when it is under a second.
+func RoundForLog(d time.Duration) time.Duration {
+	if d < time.Second {
+		return d.Round(time.Millisecond)
+	}
+	return d.Round(time.Second)
 }

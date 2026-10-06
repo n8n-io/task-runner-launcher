@@ -87,7 +87,7 @@ The launcher can pass env vars to task runners in three ways, as specified in th
 | `env-overrides` | Env vars set by the launcher directly on the runner, with precedence over `allowed-env` | Passing env vars specific to a single runner type |
 | `default-env` | Env vars set by the launcher on the runner, with the launcher's own environment taking precedence | Defaults that users may override from the runner container's environment |
 
-A key may not appear in both `default-env` and `env-overrides`.
+A key may not appear in both `default-env` and `env-overrides`. `N8N_RUNNERS_AUTH_TOKEN` is never passed to the runner through `default-env`.
 
 Exceptionally, these four env vars cannot be disallowed or overridden:
 

@@ -27,7 +27,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// completeWsHandshake accepts the launcher's offer so it proceeds to launch a runner.
+type wsHandler func(attempt int, w http.ResponseWriter, r *http.Request)
+
+func newFakeBroker(t *testing.T, ws wsHandler) *httptest.Server {
+	t.Helper()
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/runners/auth":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
+		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
+			ws(int(attempts.Add(1)), w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
 	t.Helper()
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -37,50 +56,23 @@ func completeWsHandshake(t *testing.T, upgrader websocket.Upgrader, w http.Respo
 	defer conn.Close()
 	var msg map[string]any
 	_ = conn.WriteJSON(map[string]any{"type": "broker:inforequest"})
-	_ = conn.ReadJSON(&msg) // runner:info
+	_ = conn.ReadJSON(&msg)
 	_ = conn.WriteJSON(map[string]any{"type": "broker:runnerregistered"})
-	_ = conn.ReadJSON(&msg) // runner:taskoffer
+	_ = conn.ReadJSON(&msg)
 	_ = conn.WriteJSON(map[string]any{"type": "broker:taskofferaccept", "taskId": "t1"})
-	_ = conn.ReadJSON(&msg) // runner:taskdeferred (launcher then closes the conn)
+	_ = conn.ReadJSON(&msg)
 }
 
-// fakeBroker answers the broker's HTTP and websocket endpoints normally.
-func fakeBroker(t *testing.T) *httptest.Server {
-	t.Helper()
-	upgrader := websocket.Upgrader{}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/healthz":
-			w.WriteHeader(http.StatusOK)
-		case r.URL.Path == "/runners/auth":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
-		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
-			completeWsHandshake(t, upgrader, w, r)
-		}
-	}))
+func completeHandshake(t *testing.T) wsHandler {
+	return func(_ int, w http.ResponseWriter, r *http.Request) {
+		completeWsHandshake(t, websocket.Upgrader{}, w, r)
+	}
 }
 
-// fakeBrokerDialFailsOnce rejects the first upgrade attempt, then behaves like fakeBroker.
-func fakeBrokerDialFailsOnce(t *testing.T) *httptest.Server {
-	t.Helper()
-	upgrader := websocket.Upgrader{}
-	var wsAttempts int32
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/healthz":
-			w.WriteHeader(http.StatusOK)
-		case r.URL.Path == "/runners/auth":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
-		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
-			if atomic.AddInt32(&wsAttempts, 1) == 1 {
-				w.WriteHeader(http.StatusServiceUnavailable) // dial failure: rejected before upgrade, retryable
-				return
-			}
-			completeWsHandshake(t, upgrader, w, r)
-		}
-	}))
+func rejectWith(status int) wsHandler {
+	return func(_ int, w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+	}
 }
 
 // fakeBrokerDialFailsOnceAfterDelay rejects the first upgrade attempt, but only after
@@ -128,13 +120,21 @@ func fakeBrokerRejectsDial(t *testing.T, status int, onDialAttempt ...func()) *h
 	}))
 }
 
+func sendBadMessage(_ int, w http.ResponseWriter, r *http.Request) {
+	conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("not valid json"))
+}
+
 func TestExecuteReturnsOnPermanentDialRejection(t *testing.T) {
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBrokerRejectsDial(t, http.StatusUnauthorized)
-	defer srv.Close()
+	srv := newFakeBroker(t, rejectWith(http.StatusUnauthorized))
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 
@@ -180,8 +180,13 @@ func TestExecuteRetriesAfterDialFailureInsteadOfDying(t *testing.T) {
 		[]byte("#!/bin/sh\ntrap 'exit 0' TERM\necho up > "+marker+"\nwhile true; do sleep 0.05; done\n"),
 		0o600))
 
-	srv := fakeBrokerDialFailsOnce(t)
-	defer srv.Close()
+	srv := newFakeBroker(t, func(attempt int, w http.ResponseWriter, r *http.Request) {
+		if attempt == 1 {
+			rejectWith(http.StatusServiceUnavailable)(attempt, w, r)
+			return
+		}
+		completeHandshake(t)(attempt, w, r)
+	})
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 
@@ -226,8 +231,7 @@ func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBroker(t)
-	defer srv.Close()
+	srv := newFakeBroker(t, completeHandshake(t))
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 
@@ -261,35 +265,12 @@ func TestExecuteReturnsOnNonRetryableHandshakeError(t *testing.T) {
 	}
 }
 
-// fakeBrokerBadMessage upgrades successfully, then sends a malformed message.
-func fakeBrokerBadMessage(t *testing.T) *httptest.Server {
-	t.Helper()
-	upgrader := websocket.Upgrader{}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/healthz":
-			w.WriteHeader(http.StatusOK)
-		case r.URL.Path == "/runners/auth":
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"token": "grant-token"}})
-		case strings.HasPrefix(r.URL.Path, "/runners/_ws"):
-			conn, err := upgrader.Upgrade(w, r, nil)
-			if err != nil {
-				return
-			}
-			defer conn.Close()
-			_ = conn.WriteMessage(websocket.TextMessage, []byte("not valid json"))
-		}
-	}))
-}
-
 func TestExecuteReturnsOnPostDialHandshakeError(t *testing.T) {
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBrokerBadMessage(t)
-	defer srv.Close()
+	srv := newFakeBroker(t, sendBadMessage)
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 
@@ -335,8 +316,7 @@ func TestExecuteLaunchesRunnerThenStopsOnShutdown(t *testing.T) {
 		[]byte("#!/bin/sh\ntrap 'exit 0' TERM\necho up > "+marker+"\nwhile true; do sleep 0.05; done\n"),
 		0o600))
 
-	srv := fakeBroker(t)
-	defer srv.Close()
+	srv := newFakeBroker(t, completeHandshake(t))
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 
@@ -858,8 +838,13 @@ func TestExecuteReconnectsCleanlyOnShutdownDuringDialBackoff(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = os.Chdir(origWd) }()
 
-	srv := fakeBrokerDialFailsOnce(t)
-	defer srv.Close()
+	srv := newFakeBroker(t, func(attempt int, w http.ResponseWriter, r *http.Request) {
+		if attempt == 1 {
+			rejectWith(http.StatusServiceUnavailable)(attempt, w, r)
+			return
+		}
+		completeHandshake(t)(attempt, w, r)
+	})
 	host, _, err := net.SplitHostPort(srv.Listener.Addr().String())
 	require.NoError(t, err)
 

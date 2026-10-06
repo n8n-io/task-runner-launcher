@@ -294,258 +294,243 @@ func captureStdout(t *testing.T) func() string {
 	}
 }
 
-func TestBackoffNextDoublesToCeiling(t *testing.T) {
-	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
-	b.rand = func() float64 { return 0.5 }
-
-	expected := []time.Duration{
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		400 * time.Millisecond,
-		500 * time.Millisecond,
-		500 * time.Millisecond,
-	}
-
-	for i, want := range expected {
-		got := b.next()
-		assert.Equal(t, want, got, "attempt %d", i+1)
-	}
-}
-
-func TestBackoffNextJitterBounds(t *testing.T) {
-	steps := []time.Duration{
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		400 * time.Millisecond,
-		500 * time.Millisecond,
-	}
+func TestBackoffAdvance(t *testing.T) {
+	ms := time.Millisecond
 
 	tests := []struct {
-		name string
-		rand float64
+		name          string
+		base          time.Duration
+		max           time.Duration
+		rand          float64
+		want          []time.Duration
+		calls         int
+		wantCeilingAt int
 	}{
-		{name: "rand at 0 gives 0.8x step", rand: 0},
-		{name: "rand just below 1 gives ~1.2x step", rand: 0.999999},
+		{
+			name:          "doubles to ceiling",
+			base:          100 * ms,
+			max:           500 * ms,
+			rand:          0.5,
+			want:          []time.Duration{100 * ms, 200 * ms, 400 * ms, 500 * ms, 500 * ms},
+			wantCeilingAt: 4,
+		},
+		{
+			name:          "step lands exactly on ceiling",
+			base:          100 * ms,
+			max:           400 * ms,
+			rand:          0.5,
+			want:          []time.Duration{100 * ms, 200 * ms, 400 * ms, 400 * ms},
+			wantCeilingAt: 3,
+		},
+		{
+			name: "flat when base equals max",
+			base: 100 * ms,
+			max:  100 * ms,
+			rand: 0.5,
+			want: []time.Duration{100 * ms, 100 * ms, 100 * ms},
+		},
+		{
+			name: "flat at base when base above max",
+			base: time.Second,
+			max:  100 * ms,
+			rand: 0.5,
+			want: []time.Duration{time.Second, time.Second, time.Second},
+		},
+		{
+			name:          "low jitter gives 0.8x step",
+			base:          100 * ms,
+			max:           500 * ms,
+			rand:          0,
+			want:          []time.Duration{80 * ms, 160 * ms, 320 * ms, 400 * ms, 400 * ms},
+			wantCeilingAt: 4,
+		},
+		{
+			name:          "high jitter gives 1.2x step clamped to ceiling",
+			base:          100 * ms,
+			max:           500 * ms,
+			rand:          0.999999,
+			want:          []time.Duration{120 * ms, 240 * ms, 480 * ms, 500 * ms, 500 * ms},
+			wantCeilingAt: 4,
+		},
+		{
+			name:          "negative jitter factor clamps to zero",
+			base:          100 * ms,
+			max:           500 * ms,
+			rand:          -10,
+			want:          []time.Duration{0, 0, 0, 0, 0},
+			wantCeilingAt: 4,
+		},
+		{
+			name:          "long streak stays at ceiling",
+			base:          100 * ms,
+			max:           500 * ms,
+			rand:          0.5,
+			want:          []time.Duration{100 * ms, 200 * ms, 400 * ms, 500 * ms},
+			calls:         2000,
+			wantCeilingAt: 4,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
-			b.rand = func() float64 { return tt.rand }
+			b := &Backoff{Base: tt.base, Max: tt.max, rand: func() float64 { return tt.rand }}
+			calls := max(tt.calls, len(tt.want))
 
-			factor := 0.8 + 0.4*tt.rand
-			for i, step := range steps {
-				got := b.next()
-				want := time.Duration(float64(step) * factor)
-				if want > 500*time.Millisecond {
-					want = 500 * time.Millisecond
-				}
-				assert.InDelta(t, float64(want), float64(got), float64(2*time.Millisecond), "attempt %d", i+1)
-				assert.LessOrEqual(t, got, 500*time.Millisecond)
+			for i := range calls {
+				call := i + 1
+				want := tt.want[min(i, len(tt.want)-1)]
+
+				got, justReachedCeiling := b.Advance(time.Now())
+
+				assert.InDelta(t, float64(want), float64(got), float64(time.Microsecond), "call %d", call)
+				assert.Equal(t, call == tt.wantCeilingAt, justReachedCeiling, "call %d", call)
+				assert.Equal(t, call, b.Attempts())
 			}
+			assert.True(t, b.atCeiling())
 		})
 	}
 }
 
-func TestBackoffNextFlatWhenBaseAboveCeiling(t *testing.T) {
-	b := &Backoff{Base: time.Second, Max: 100 * time.Millisecond}
-	b.rand = func() float64 { return 0.5 }
-
-	for i := 0; i < 3; i++ {
-		got := b.next()
-		assert.Equal(t, time.Second, got, "attempt %d", i+1)
-	}
-}
-
-func TestWaitReturnsCanceledPromptly(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		done <- Wait(ctx, time.Hour)
-	}()
-
-	cancel()
-
-	select {
-	case err := <-done:
-		assert.ErrorIs(t, err, context.Canceled)
-	case <-time.After(time.Second):
-		t.Fatal("Wait did not return promptly after cancellation")
-	}
-}
-
-func TestUnlimitedRetryWithContextGrowsSpacing(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	base := 10 * time.Millisecond
-	maxWait := 40 * time.Millisecond
-	logger := logs.NewLogger(logs.InfoLevel, "")
-
-	var mu sync.Mutex
-	var timestamps []time.Time
-	attempt := 0
-
-	_, err := UnlimitedRetryWithContext(ctx, "test-operation", base, maxWait, logger, func() (string, error) {
-		mu.Lock()
-		timestamps = append(timestamps, time.Now())
-		attempt++
-		n := attempt
-		mu.Unlock()
-		if n >= 5 {
-			return "done", nil
-		}
-		return "", errors.New("temporary error")
-	})
-
-	require.NoError(t, err)
-	require.Len(t, timestamps, 5)
-
-	gaps := make([]time.Duration, 0, 4)
-	for i := 1; i < len(timestamps); i++ {
-		gaps = append(gaps, timestamps[i].Sub(timestamps[i-1]))
-	}
-
-	for k, gap := range gaps {
-		if k == 0 {
-			continue
-		}
-		lowerBound := time.Duration(0.8 * float64(min(base<<k, maxWait)))
-		assert.GreaterOrEqual(t, gap, lowerBound-15*time.Millisecond, "gap %d too short", k+1)
-	}
-	assert.Greater(t, gaps[len(gaps)-1], gaps[0])
-}
-
-func TestUnlimitedRetryFlatSpacingWhenNoCeiling(t *testing.T) {
-	restoreFn := setRetryTimings(t)
-	defer restoreFn()
-	DefaultWaitTimeBetweenRetries = 50 * time.Millisecond
-	DefaultMaxRetryTime = time.Second
-
-	var timestamps []time.Time
-	count := 0
-	_, err := UnlimitedRetry("test-operation", func() (string, error) {
-		timestamps = append(timestamps, time.Now())
-		count++
-		if count >= 3 {
-			return "done", nil
-		}
-		return "", errors.New("temporary error")
-	})
-
-	require.NoError(t, err)
-	require.Len(t, timestamps, 3)
-
-	gap1 := timestamps[1].Sub(timestamps[0])
-	gap2 := timestamps[2].Sub(timestamps[1])
-
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap1), float64(15*time.Millisecond))
-	assert.InDelta(t, float64(DefaultWaitTimeBetweenRetries), float64(gap2), float64(15*time.Millisecond))
-}
-
-func TestBackoffZeroValueBeforeFirstNext(t *testing.T) {
-	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
+func TestBackoffResetAndClock(t *testing.T) {
+	b := &Backoff{Base: 100 * time.Millisecond, Max: 400 * time.Millisecond, rand: func() float64 { return 0.5 }}
+	now := time.Now()
 
 	assert.Equal(t, 0, b.Attempts())
 	assert.Equal(t, time.Duration(0), b.Since())
 	assert.False(t, b.atCeiling())
+
+	b.Advance(now.Add(-time.Hour))
+
+	assert.GreaterOrEqual(t, b.Since(), time.Hour)
+	assert.Less(t, b.Since(), 2*time.Hour)
+
+	b.Advance(now.Add(-3 * time.Hour))
+	_, justReachedCeiling := b.Advance(now)
+
+	assert.Less(t, b.Since(), 2*time.Hour)
+	assert.True(t, justReachedCeiling)
+
+	b.Reset()
+
+	assert.Equal(t, 0, b.Attempts())
+	assert.Equal(t, time.Duration(0), b.Since())
+
+	d, justReachedCeiling := b.Advance(now.Add(-2 * time.Hour))
+
+	assert.InDelta(t, float64(100*time.Millisecond), float64(d), float64(time.Microsecond))
+	assert.False(t, justReachedCeiling)
+	assert.Equal(t, 1, b.Attempts())
+	assert.GreaterOrEqual(t, b.Since(), 2*time.Hour)
+
+	b.Advance(now)
+	_, justReachedCeiling = b.Advance(now)
+
+	assert.True(t, justReachedCeiling)
 }
 
-func TestBackoffNextStaysAtCeilingAfterManyCalls(t *testing.T) {
-	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
-	b.rand = func() float64 { return 0.5 }
-
-	b.next()
-	b.next()
-	b.next()
-
-	for i := 0; i < 100; i++ {
-		got := b.next()
-		assert.Equal(t, 500*time.Millisecond, got, "call %d", i+1)
-	}
-	assert.True(t, b.atCeiling())
-}
-
-func TestBackoffNextClampsNegativeJitterFactor(t *testing.T) {
-	b := &Backoff{Base: 100 * time.Millisecond, Max: 500 * time.Millisecond}
-	b.rand = func() float64 { return -10 }
-
-	got := b.next()
-
-	assert.Equal(t, time.Duration(0), got)
-}
-
-func TestWaitReturnsPromptlyForZeroAndNegativeDuration(t *testing.T) {
+func TestWait(t *testing.T) {
 	tests := []struct {
-		name string
-		d    time.Duration
+		name    string
+		d       time.Duration
+		cancel  bool
+		wantErr error
 	}{
-		{name: "zero duration", d: 0},
-		{name: "negative duration", d: -time.Second},
+		{name: "zero duration returns", d: 0},
+		{name: "negative duration returns", d: -time.Second},
+		{name: "cancelled context interrupts", d: time.Hour, cancel: true, wantErr: context.Canceled},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			done := make(chan error, 1)
-			go func() { done <- Wait(ctx, tt.d) }()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if tt.cancel {
+				cancel()
+			}
 
-			select {
-			case err := <-done:
+			err := Wait(ctx, tt.d)
+
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
 				assert.NoError(t, err)
-			case <-time.After(50 * time.Millisecond):
-				t.Fatal("Wait did not return promptly")
 			}
 		})
 	}
 }
 
-func TestUnlimitedRetryWithContextLogsCeilingOnce(t *testing.T) {
-	readOutput := captureStdout(t)
-	logger := logs.NewLogger(logs.InfoLevel, "")
+func TestUnlimitedRetryWithContextBackoff(t *testing.T) {
+	ms := time.Millisecond
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	count := 0
-	_, err := UnlimitedRetryWithContext(ctx, "test-operation", 10*time.Millisecond, 40*time.Millisecond, logger, func() (string, error) {
-		count++
-		if count >= 5 {
-			return "done", nil
-		}
-		return "", errors.New("temporary error")
-	})
-	output := readOutput()
-
-	require.NoError(t, err)
-
-	warnLines := 0
-	for _, line := range strings.Split(output, "\n") {
-		if strings.Contains(line, "WARN") {
-			warnLines++
-		}
+	tests := []struct {
+		name     string
+		base     time.Duration
+		max      time.Duration
+		steps    []time.Duration
+		wantWarn bool
+	}{
+		{
+			name:     "growing delay warns once on reaching the ceiling",
+			base:     10 * ms,
+			max:      40 * ms,
+			steps:    []time.Duration{10 * ms, 20 * ms, 40 * ms, 40 * ms},
+			wantWarn: true,
+		},
+		{
+			name:  "base above max stays flat without warning",
+			base:  20 * ms,
+			max:   10 * ms,
+			steps: []time.Duration{20 * ms, 20 * ms, 20 * ms, 20 * ms},
+		},
+		{
+			name:  "base equal to max stays flat without warning",
+			base:  10 * ms,
+			max:   10 * ms,
+			steps: []time.Duration{10 * ms, 10 * ms, 10 * ms, 10 * ms},
+		},
+		{
+			name:  "no max stays flat without warning",
+			base:  10 * ms,
+			max:   0,
+			steps: []time.Duration{10 * ms, 10 * ms, 10 * ms, 10 * ms},
+		},
 	}
-	assert.Equal(t, 1, warnLines, "reaching the ceiling should log exactly one WARN line")
-	assert.Contains(t, output, "attempt")
-	assert.Contains(t, output, "failing for")
-}
 
-func TestBackoffNoCeilingLogWhenBaseAtOrAboveMax(t *testing.T) {
-	readOutput := captureStdout(t)
-	logger := logs.NewLogger(logs.InfoLevel, "")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			readOutput := captureStdout(t)
+			logger := logs.NewLogger(logs.InfoLevel, "")
+			calls := 0
+			operation := func() (string, error) {
+				calls++
+				if calls > len(tt.steps) {
+					return "done", nil
+				}
+				return "", errors.New("temporary error")
+			}
+			var sum time.Duration
+			for _, step := range tt.steps {
+				sum += step
+			}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	count := 0
-	_, err := UnlimitedRetryWithContext(ctx, "test-operation", 200*time.Millisecond, 100*time.Millisecond, logger, func() (string, error) {
-		count++
-		if count >= 3 {
-			return "done", nil
-		}
-		return "", errors.New("temporary error")
-	})
-	output := readOutput()
+			start := time.Now()
+			result, err := UnlimitedRetryWithContext(context.Background(), "test-operation", tt.base, tt.max, logger, operation)
+			elapsed := time.Since(start)
+			output := readOutput()
 
-	require.NoError(t, err)
-	assert.NotContains(t, output, "WARN")
+			require.NoError(t, err)
+			assert.Equal(t, "done", result)
+			assert.Equal(t, len(tt.steps)+1, calls)
+			assert.GreaterOrEqual(t, elapsed, time.Duration(0.8*float64(sum)))
+			if tt.wantWarn {
+				assert.Equal(t, 1, strings.Count(output, "WARN"))
+				assert.Contains(t, output, "Operation `test-operation` retrying at ceiling: attempt 3,")
+				assert.Contains(t, output, "failing for")
+				assert.Contains(t, output, "retry interval")
+				assert.Contains(t, output, "last error: temporary error")
+			} else {
+				assert.NotContains(t, output, "WARN")
+			}
+		})
+	}
 }

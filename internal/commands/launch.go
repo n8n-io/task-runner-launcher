@@ -28,7 +28,7 @@ const (
 )
 
 // stableConnectionThreshold is how long a connection must last before its drop starts a new backoff streak instead of continuing the old one.
-const stableConnectionThreshold = 60 * time.Second
+var stableConnectionThreshold = 60 * time.Second
 
 // positiveEnvSeconds reads a positive integer from env, falling back to def.
 func positiveEnvSeconds(name string, def int) int {

@@ -602,7 +602,7 @@ func waitForLog(t *testing.T, readLogs func() string, want string, count int) {
 
 var (
 	dialFailedLog = "Failed to connect to task broker, launcher will retry: " + errs.ErrDialFailed.Error()
-	serverDownLog = "Task broker is down, launcher will try to reconnect..."
+	serverDownLog = "Task broker is down, launcher will try to reconnect"
 )
 
 var reconnectFailures = []struct {
@@ -641,8 +641,9 @@ func TestExecuteBackoffGrowsToCeiling(t *testing.T) {
 				}
 			}
 			out := readLogs()
-			assert.Equal(t, 1, strings.Count(out, "ERROR"))
-			assert.Regexp(t, regexp.QuoteMeta(tt.logPrefix)+`.* \(attempt 3, failing for \d+s, retrying in \d+s\), task broker still unreachable, retrying every 0s`, out)
+			assert.Equal(t, 1, strings.Count(out, "ceiling"))
+			assert.NotContains(t, out, "ERROR")
+			assert.Regexp(t, regexp.QuoteMeta(tt.logPrefix)+`.* \(attempt 3, failing for \d+ms, retrying in \d+ms\), retry delay reached its ceiling of 200ms`, out)
 		})
 	}
 }
@@ -724,7 +725,7 @@ func TestExecuteLogsReconnectedOnRegistration(t *testing.T) {
 
 	out := readLogs()
 	assert.Equal(t, 1, strings.Count(out, "Reconnected to task broker"))
-	assert.Contains(t, out, "Reconnected to task broker after 2 attempts over 0s")
+	assert.Regexp(t, `Reconnected to task broker after 2 attempts over \d+ms`, out)
 }
 
 func TestExecuteFailingForStartsAtFailedAttempt(t *testing.T) {
@@ -734,7 +735,7 @@ func TestExecuteFailingForStartsAtFailedAttempt(t *testing.T) {
 		want string
 	}{
 		{"slow dial failure counts its own duration", rejectAfter(1200 * time.Millisecond), regexp.QuoteMeta(dialFailedLog) + `.*\(attempt 1, failing for [1-9]\d*s`},
-		{"server down starts at the drop", dropAfter(1500 * time.Millisecond), regexp.QuoteMeta(serverDownLog) + ` \(attempt 1, failing for 0s`},
+		{"server down starts at the drop", dropAfter(1500 * time.Millisecond), regexp.QuoteMeta(serverDownLog) + ` \(attempt 1, failing for (0s|\d+ms),`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

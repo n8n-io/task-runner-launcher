@@ -80,7 +80,7 @@ func configureRunnerShutdown(cmd *exec.Cmd, waitDelay time.Duration, logger *log
 func (c *LaunchCommand) logReconnect(backoff *retry.Backoff, connectedFor time.Duration) {
 	if attempts := backoff.Attempts(); attempts >= 2 {
 		// connectedFor is excluded so the elapsed time covers only the failing streak, not this handshake's connected time.
-		elapsed := (backoff.Since() - connectedFor).Round(time.Second)
+		elapsed := retry.RoundForLog(backoff.Since() - connectedFor)
 		c.logger.Infof("Reconnected to task broker after %d attempts over %s", attempts, elapsed)
 	}
 }
@@ -93,11 +93,11 @@ func (c *LaunchCommand) waitBeforeReconnect(
 ) bool {
 	d, justReachedCeiling := backoff.Advance(attemptStart)
 	attempts := backoff.Attempts()
-	since := backoff.Since().Round(time.Second)
-	delay := d.Round(time.Second)
+	since := retry.RoundForLog(backoff.Since())
+	delay := retry.RoundForLog(d)
 	if justReachedCeiling {
-		c.logger.Errorf("%s (attempt %d, failing for %s, retrying in %s), task broker still unreachable, retrying every %s",
-			prefix, attempts, since, delay, backoff.Max.Round(time.Second))
+		c.logger.Warnf("%s (attempt %d, failing for %s, retrying in %s), retry delay reached its ceiling of %s",
+			prefix, attempts, since, delay, retry.RoundForLog(backoff.Max))
 	} else {
 		c.logger.Warnf("%s (attempt %d, failing for %s, retrying in %s)", prefix, attempts, since, delay)
 	}
@@ -189,7 +189,7 @@ func (c *LaunchCommand) Execute(ctx context.Context, launcherConfig *config.Laun
 			if dropDetected.Sub(handshakeStart) >= stableConnectionThreshold {
 				backoff.Reset()
 			}
-			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect...", dropDetected) {
+			if c.waitBeforeReconnect(ctx, &backoff, "Task broker is down, launcher will try to reconnect", dropDetected) {
 				return nil
 			}
 			continue // back to checking until broker ready

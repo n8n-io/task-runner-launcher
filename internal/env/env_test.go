@@ -341,7 +341,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			},
 		},
 		{
-			name: "default-env uses env value when set",
+			name: "resolves default-env per key against the environment",
 			launcherConfig: &config.LauncherConfig{
 				BaseConfig: &config.BaseConfig{
 					AutoShutdownTimeout: "30",
@@ -353,101 +353,9 @@ func TestPrepareRunnerEnv(t *testing.T) {
 						AllowedEnv:            []string{},
 						HealthCheckServerPort: "5681",
 						DefaultEnv: map[string]string{
-							"NODE_ENV": "production",
-						},
-					},
-				},
-			},
-			envSetup: map[string]string{
-				"PATH":     "/usr/bin",
-				"NODE_ENV": "development",
-			},
-			expected: []string{
-				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
-				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
-				"N8N_RUNNERS_TASK_TIMEOUT=60",
-				"NODE_ENV=development",
-				"PATH=/usr/bin",
-			},
-		},
-		{
-			name: "default-env uses default value when unset",
-			launcherConfig: &config.LauncherConfig{
-				BaseConfig: &config.BaseConfig{
-					AutoShutdownTimeout: "30",
-					TaskTimeout:         "60",
-					TaskBrokerURI:       "http://localhost:5679",
-				},
-				RunnerConfigs: map[string]*config.RunnerConfig{
-					"javascript": {
-						AllowedEnv:            []string{},
-						HealthCheckServerPort: "5681",
-						DefaultEnv: map[string]string{
-							"NODE_ENV": "production",
-						},
-					},
-				},
-			},
-			envSetup: map[string]string{
-				"PATH": "/usr/bin",
-			},
-			expected: []string{
-				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
-				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
-				"N8N_RUNNERS_TASK_TIMEOUT=60",
-				"NODE_ENV=production",
-				"PATH=/usr/bin",
-			},
-		},
-		{
-			name: "default-env keeps empty env value",
-			launcherConfig: &config.LauncherConfig{
-				BaseConfig: &config.BaseConfig{
-					AutoShutdownTimeout: "30",
-					TaskTimeout:         "60",
-					TaskBrokerURI:       "http://localhost:5679",
-				},
-				RunnerConfigs: map[string]*config.RunnerConfig{
-					"javascript": {
-						AllowedEnv:            []string{},
-						HealthCheckServerPort: "5681",
-						DefaultEnv: map[string]string{
-							"NODE_ENV": "production",
-						},
-					},
-				},
-			},
-			envSetup: map[string]string{
-				"PATH":     "/usr/bin",
-				"NODE_ENV": "",
-			},
-			expected: []string{
-				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
-				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
-				"N8N_RUNNERS_TASK_TIMEOUT=60",
-				"NODE_ENV=",
-				"PATH=/usr/bin",
-			},
-		},
-		{
-			name: "default-env prefers env value for legacy timeout variable",
-			launcherConfig: &config.LauncherConfig{
-				BaseConfig: &config.BaseConfig{
-					AutoShutdownTimeout: "30",
-					TaskTimeout:         "60",
-					TaskBrokerURI:       "http://localhost:5679",
-				},
-				RunnerConfigs: map[string]*config.RunnerConfig{
-					"javascript": {
-						AllowedEnv:            []string{},
-						HealthCheckServerPort: "5681",
-						DefaultEnv: map[string]string{
+							"SET_VAR":                  "default",
+							"UNSET_VAR":                "default",
+							"EMPTY_VAR":                "default",
 							"N8N_RUNNERS_TASK_TIMEOUT": "10",
 						},
 					},
@@ -455,19 +363,24 @@ func TestPrepareRunnerEnv(t *testing.T) {
 			},
 			envSetup: map[string]string{
 				"PATH":                     "/usr/bin",
+				"SET_VAR":                  "from-env",
+				"EMPTY_VAR":                "",
 				"N8N_RUNNERS_TASK_TIMEOUT": "99",
 			},
 			expected: []string{
+				"EMPTY_VAR=",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
 				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
 				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
 				"N8N_RUNNERS_TASK_TIMEOUT=99",
 				"PATH=/usr/bin",
+				"SET_VAR=from-env",
+				"UNSET_VAR=default",
 			},
 		},
 		{
-			name: "disregards default-env for required runtime variables",
+			name: "disregards default-env for required runtime variables and auth token",
 			launcherConfig: &config.LauncherConfig{
 				BaseConfig: &config.BaseConfig{
 					AutoShutdownTimeout: "30",
@@ -480,36 +393,7 @@ func TestPrepareRunnerEnv(t *testing.T) {
 						HealthCheckServerPort: "5681",
 						DefaultEnv: map[string]string{
 							"N8N_RUNNERS_TASK_BROKER_URI": "http://evil:5679",
-						},
-					},
-				},
-			},
-			envSetup: map[string]string{
-				"PATH": "/usr/bin",
-			},
-			expected: []string{
-				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
-				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
-				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
-				"N8N_RUNNERS_TASK_TIMEOUT=60",
-				"PATH=/usr/bin",
-			},
-		},
-		{
-			name: "disregards default-env for launcher auth token",
-			launcherConfig: &config.LauncherConfig{
-				BaseConfig: &config.BaseConfig{
-					AutoShutdownTimeout: "30",
-					TaskTimeout:         "60",
-					TaskBrokerURI:       "http://localhost:5679",
-				},
-				RunnerConfigs: map[string]*config.RunnerConfig{
-					"javascript": {
-						AllowedEnv:            []string{},
-						HealthCheckServerPort: "5681",
-						DefaultEnv: map[string]string{
-							"N8N_RUNNERS_AUTH_TOKEN": "default-token",
+							"N8N_RUNNERS_AUTH_TOKEN":      "default-token",
 						},
 					},
 				},

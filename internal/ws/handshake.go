@@ -272,6 +272,7 @@ func Handshake(ctx context.Context, cfg HandshakeConfig, logger *logs.Logger, gr
 			ctxDone = nil // stop re-selecting on the (now-closed) ctx channel
 			graceExpired = time.After(gracePeriod)
 		case <-graceExpired:
+			notifyRegistered()
 			wsConn.Close()
 			return errs.ErrShutdownRequested
 		}

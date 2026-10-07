@@ -340,6 +340,77 @@ func TestPrepareRunnerEnv(t *testing.T) {
 				"PATH=/usr/bin",
 			},
 		},
+		{
+			name: "resolves default-env per key against the environment",
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "30",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv:            []string{},
+						HealthCheckServerPort: "5681",
+						DefaultEnv: map[string]string{
+							"SET_VAR":                  "default",
+							"UNSET_VAR":                "default",
+							"EMPTY_VAR":                "default",
+							"N8N_RUNNERS_TASK_TIMEOUT": "10",
+						},
+					},
+				},
+			},
+			envSetup: map[string]string{
+				"PATH":                     "/usr/bin",
+				"SET_VAR":                  "from-env",
+				"EMPTY_VAR":                "",
+				"N8N_RUNNERS_TASK_TIMEOUT": "99",
+			},
+			expected: []string{
+				"EMPTY_VAR=",
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
+				"N8N_RUNNERS_TASK_TIMEOUT=99",
+				"PATH=/usr/bin",
+				"SET_VAR=from-env",
+				"UNSET_VAR=default",
+			},
+		},
+		{
+			name: "disregards default-env for required runtime variables and auth token",
+			launcherConfig: &config.LauncherConfig{
+				BaseConfig: &config.BaseConfig{
+					AutoShutdownTimeout: "30",
+					TaskTimeout:         "60",
+					TaskBrokerURI:       "http://localhost:5679",
+				},
+				RunnerConfigs: map[string]*config.RunnerConfig{
+					"javascript": {
+						AllowedEnv:            []string{},
+						HealthCheckServerPort: "5681",
+						DefaultEnv: map[string]string{
+							"N8N_RUNNERS_TASK_BROKER_URI": "http://evil:5679",
+							"N8N_RUNNERS_AUTH_TOKEN":      "default-token",
+						},
+					},
+				},
+			},
+			envSetup: map[string]string{
+				"PATH":                   "/usr/bin",
+				"N8N_RUNNERS_AUTH_TOKEN": "secret",
+			},
+			expected: []string{
+				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=30",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_ENABLED=true",
+				"N8N_RUNNERS_HEALTH_CHECK_SERVER_PORT=5681",
+				"N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679",
+				"N8N_RUNNERS_TASK_TIMEOUT=60",
+				"PATH=/usr/bin",
+			},
+		},
 	}
 
 	for _, tt := range tests {

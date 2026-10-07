@@ -97,6 +97,9 @@ type RunnerConfig struct {
 
 	// Env vars for the launcher to set directly on the runner.
 	EnvOverrides map[string]string `json:"env-overrides"`
+
+	// Env vars for the launcher to set on the runner unless the launcher's own environment sets them.
+	DefaultEnv map[string]string `json:"default-env"`
 }
 
 // LoadLauncherConfig loads the launcher's base config from the launcher's environment and
@@ -218,6 +221,10 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 		return nil, err
 	}
 
+	if err := validateEnvKeyConflicts(runnerConfigs); err != nil {
+		return nil, err
+	}
+
 	if taskRunnersNum == 1 {
 		logs.Debug("Loaded config file with a single runner config")
 	} else {
@@ -225,6 +232,18 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 	}
 
 	return runnerConfigs, nil
+}
+
+func validateEnvKeyConflicts(runnerConfigs map[string]*RunnerConfig) error {
+	for runnerType, config := range runnerConfigs {
+		for key := range config.DefaultEnv {
+			if _, exists := config.EnvOverrides[key]; exists {
+				return fmt.Errorf("runner %s: %s is set in both default-env and env-overrides", runnerType, key)
+			}
+		}
+	}
+
+	return nil
 }
 
 func validateRunnerPorts(runnerConfigs map[string]*RunnerConfig) error {

@@ -11,6 +11,11 @@ import (
 )
 
 const (
+	// EnvVarAuthToken is the env var for the auth token the launcher uses to
+	// authenticate with the main instance. It is never passed to runners.
+	// nolint:gosec // G101: False positive
+	EnvVarAuthToken = "N8N_RUNNERS_AUTH_TOKEN"
+
 	// EnvVarGrantToken is the env var for the single-use grant token returned by
 	// the main instance to the launcher in exchange for the auth token.
 	// nolint:gosec // G101: False positive
@@ -126,6 +131,23 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 	// TODO: The next two lines are legacy behavior to remove after deprecation period.
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, baseConfig.TaskTimeout))
+
+	for key, value := range runnerConfig.DefaultEnv {
+		if slices.Contains(requiredRuntimeEnvVars, key) {
+			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
+			continue
+		}
+		// A config must not be able to forward the launcher's auth token to a runner.
+		if key == EnvVarAuthToken {
+			logger.Warnf("Disregarded default-env for launcher-only variable: %s", key)
+			continue
+		}
+		if launcherValue, present := os.LookupEnv(key); present {
+			value = launcherValue
+		}
+		runnerEnv = Clear(runnerEnv, key)
+		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
+	}
 
 	for key, value := range runnerConfig.EnvOverrides {
 		if slices.Contains(requiredRuntimeEnvVars, key) {

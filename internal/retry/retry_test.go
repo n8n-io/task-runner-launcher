@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -361,6 +362,13 @@ func TestBackoffAdvance(t *testing.T) {
 			wantCeilingAt: 4,
 		},
 		{
+			name: "largest duration ceiling does not overflow",
+			base: math.MaxInt64,
+			max:  math.MaxInt64,
+			rand: 0.5,
+			want: []time.Duration{math.MaxInt64, math.MaxInt64},
+		},
+		{
 			name:          "long streak stays at ceiling",
 			base:          100 * ms,
 			max:           500 * ms,
@@ -438,6 +446,7 @@ func TestWait(t *testing.T) {
 		{name: "zero duration returns", d: 0},
 		{name: "negative duration returns", d: -time.Second},
 		{name: "cancelled context interrupts", d: time.Hour, cancel: true, wantErr: context.Canceled},
+		{name: "cancelled context wins over zero duration", d: 0, cancel: true, wantErr: context.Canceled},
 	}
 
 	for _, tt := range tests {

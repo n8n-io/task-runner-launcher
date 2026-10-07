@@ -18,6 +18,8 @@ import (
 )
 
 func main() {
+	logs.Init()
+
 	flag.Usage = func() {
 		fmt.Printf("Usage: %s [runner-type(s)]\n", os.Args[0])
 		flag.PrintDefaults()

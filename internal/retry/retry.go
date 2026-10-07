@@ -199,8 +199,8 @@ func (b *Backoff) next() time.Duration {
 	if delaySeconds < 0 {
 		delaySeconds = 0
 	}
-	if delaySeconds > effCeilingSeconds {
-		delaySeconds = effCeilingSeconds
+	if delaySeconds >= effCeilingSeconds {
+		return b.effectiveCeiling()
 	}
 
 	return time.Duration(delaySeconds * float64(time.Second))
@@ -261,7 +261,7 @@ func Wait(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return nil
+		return ctx.Err()
 	}
 }
 

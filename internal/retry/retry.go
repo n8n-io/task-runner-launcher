@@ -261,7 +261,7 @@ func Wait(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		return nil
+		return ctx.Err()
 	}
 }
 

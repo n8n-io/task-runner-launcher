@@ -438,6 +438,7 @@ func TestWait(t *testing.T) {
 		{name: "zero duration returns", d: 0},
 		{name: "negative duration returns", d: -time.Second},
 		{name: "cancelled context interrupts", d: time.Hour, cancel: true, wantErr: context.Canceled},
+		{name: "cancelled context wins over zero duration", d: 0, cancel: true, wantErr: context.Canceled},
 	}
 
 	for _, tt := range tests {

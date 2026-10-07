@@ -17,6 +17,7 @@ import (
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
+	"task-runner-launcher/internal/retry"
 	"testing"
 	"time"
 
@@ -700,6 +701,20 @@ func TestExecuteStopsDuringReconnectWait(t *testing.T) {
 			assert.Contains(t, readLogs(), "Received shutdown signal, launcher will stop")
 		})
 	}
+}
+
+func TestWaitBeforeReconnectSkipsRetryLogAfterShutdown(t *testing.T) {
+	logger, readLogs := captureLauncherLogs(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	backoff := retry.Backoff{Base: 10 * time.Second, Max: 10 * time.Second}
+
+	stopped := NewLaunchCommand(logger).waitBeforeReconnect(ctx, &backoff, dialFailedLog, time.Now())
+
+	assert.True(t, stopped)
+	assert.Equal(t, 0, backoff.Attempts())
+	assert.NotContains(t, readLogs(), dialFailedLog)
+	assert.Contains(t, readLogs(), "Received shutdown signal, launcher will stop")
 }
 
 func TestExecuteRestartsStreakAtAttemptOne(t *testing.T) {

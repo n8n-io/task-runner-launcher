@@ -91,6 +91,10 @@ func (c *LaunchCommand) waitBeforeReconnect(
 	prefix string,
 	attemptStart time.Time,
 ) bool {
+	if ctx.Err() != nil {
+		c.logger.Info("Received shutdown signal, launcher will stop")
+		return true
+	}
 	d, justReachedCeiling := backoff.Advance(attemptStart)
 	attempts := backoff.Attempts()
 	since := retry.RoundForLog(backoff.Since())

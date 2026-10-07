@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -359,6 +360,13 @@ func TestBackoffAdvance(t *testing.T) {
 			rand:          -10,
 			want:          []time.Duration{0, 0, 0, 0, 0},
 			wantCeilingAt: 4,
+		},
+		{
+			name: "largest duration ceiling does not overflow",
+			base: math.MaxInt64,
+			max:  math.MaxInt64,
+			rand: 0.5,
+			want: []time.Duration{math.MaxInt64, math.MaxInt64},
 		},
 		{
 			name:          "long streak stays at ceiling",

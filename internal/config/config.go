@@ -20,6 +20,13 @@ const (
 	// EnvVarBrokerReadinessPollInterval is the env var for the broker readiness poll interval.
 	EnvVarBrokerReadinessPollInterval = "N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS"
 	maxBrokerReadinessPollIntervalMs  = (1<<63 - 1) / int64(time.Millisecond)
+	// EnvVarReconnectInterval is the env var for the dial leg's base retry delay.
+	EnvVarReconnectInterval = "N8N_RUNNERS_LAUNCHER_RECONNECT_INTERVAL_MS"
+	maxReconnectIntervalMs  = (1<<63 - 1) / int64(time.Millisecond)
+	// EnvVarRetryMaxInterval is the env var for the retry delay ceiling shared
+	// by the dial leg and the broker readiness check.
+	EnvVarRetryMaxInterval = "N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS"
+	maxRetryMaxIntervalMs  = (1<<63 - 1) / int64(time.Millisecond)
 )
 
 // LauncherConfig holds the full configuration for the launcher.
@@ -50,6 +57,14 @@ type BaseConfig struct {
 
 	// BrokerReadinessPollIntervalMs is the delay between broker readiness checks in milliseconds.
 	BrokerReadinessPollIntervalMs int64 `env:"N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS, default=5000"`
+
+	// ReconnectIntervalMs is the base delay (in milliseconds) before the first
+	// dial-leg retry, growing up to RetryMaxIntervalMs.
+	ReconnectIntervalMs int64 `env:"N8N_RUNNERS_LAUNCHER_RECONNECT_INTERVAL_MS, default=5000"`
+
+	// RetryMaxIntervalMs is the ceiling (in milliseconds) for the growing
+	// retry delay on both the broker readiness check and the dial leg.
+	RetryMaxIntervalMs int64 `env:"N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS, default=30000"`
 
 	// HealthCheckServerPort is the port for the launcher's health check server.
 	HealthCheckServerPort string `env:"N8N_RUNNERS_LAUNCHER_HEALTH_CHECK_PORT, default=5680"`
@@ -136,6 +151,17 @@ func LoadLauncherConfig(runnerTypes []string, baseLookuper envconfig.Lookuper) (
 			EnvVarBrokerReadinessPollInterval,
 			maxBrokerReadinessPollIntervalMs,
 		))
+	}
+
+	if baseConfig.ReconnectIntervalMs < 100 {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be at least 100", EnvVarReconnectInterval))
+	} else if baseConfig.ReconnectIntervalMs > maxReconnectIntervalMs {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must not exceed %d", EnvVarReconnectInterval, maxReconnectIntervalMs))
+	}
+	if baseConfig.RetryMaxIntervalMs < 100 {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must be at least 100", EnvVarRetryMaxInterval))
+	} else if baseConfig.RetryMaxIntervalMs > maxRetryMaxIntervalMs {
+		cfgErrs = append(cfgErrs, fmt.Errorf("%s must not exceed %d", EnvVarRetryMaxInterval, maxRetryMaxIntervalMs))
 	}
 
 	if baseConfig.Sentry.Dsn != "" {

@@ -16,7 +16,10 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 	tests := []struct {
 		name             string
 		serverFn         func(http.ResponseWriter, *http.Request, int)
+		interval         time.Duration
+		maxInterval      time.Duration
 		expectedRequests int
+		minElapsed       time.Duration
 		expectedError    error
 		timeout          time.Duration
 	}{
@@ -25,6 +28,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			serverFn: func(w http.ResponseWriter, _ *http.Request, _ int) {
 				w.WriteHeader(http.StatusOK)
 			},
+			interval:         time.Millisecond,
 			expectedRequests: 1,
 			timeout:          time.Second,
 		},
@@ -37,7 +41,23 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 				}
 				w.WriteHeader(http.StatusOK)
 			},
+			interval:         time.Millisecond,
 			expectedRequests: 2,
+			timeout:          time.Second,
+		},
+		{
+			name: "backs off between retries",
+			serverFn: func(w http.ResponseWriter, _ *http.Request, requestCount int) {
+				if requestCount <= 3 {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			},
+			interval:         20 * time.Millisecond,
+			maxInterval:      time.Second,
+			expectedRequests: 4,
+			minElapsed:       100 * time.Millisecond,
 			timeout:          time.Second,
 		},
 	}
@@ -54,10 +74,11 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
 
+			start := time.Now()
 			done := make(chan error)
 			go func() {
 				logger := logs.NewLogger(logs.InfoLevel, "")
-				done <- CheckUntilBrokerReady(ctx, srv.URL, time.Millisecond, logger)
+				done <- CheckUntilBrokerReady(ctx, srv.URL, tt.interval, tt.maxInterval, logger)
 			}()
 
 			select {
@@ -68,6 +89,7 @@ func TestCheckUntilBrokerReadyHappyPath(t *testing.T) {
 					assert.EqualError(t, err, tt.expectedError.Error(), "Unexpected error")
 				}
 				assert.Equal(t, tt.expectedRequests, requestCount, "Unexpected number of requests")
+				assert.GreaterOrEqual(t, time.Since(start), tt.minElapsed)
 
 			case <-ctx.Done():
 				t.Error("test timed out")
@@ -106,7 +128,7 @@ func TestCheckUntilBrokerReadyErrors(t *testing.T) {
 			defer cancel()
 
 			logger := logs.NewLogger(logs.InfoLevel, "")
-			err := CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
+			err := CheckUntilBrokerReady(ctx, srv.URL, time.Hour, 0, logger)
 
 			assert.ErrorIs(t, err, context.DeadlineExceeded)
 		})
@@ -125,7 +147,7 @@ func TestCheckUntilBrokerReadyCancelsInFlightRequest(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		logger := logs.NewLogger(logs.InfoLevel, "")
-		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, logger)
+		done <- CheckUntilBrokerReady(ctx, srv.URL, time.Hour, 0, logger)
 	}()
 
 	<-requestStarted

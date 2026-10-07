@@ -39,6 +39,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	logs.SetLevel(logs.ParseLevel(launcherConfig.BaseConfig.LogLevel))
+
 	errorreporting.Init(launcherConfig.BaseConfig.Sentry)
 	defer errorreporting.Close()
 

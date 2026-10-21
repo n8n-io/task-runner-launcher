@@ -291,3 +291,57 @@ func TestGetRunnerPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestSetLevel(t *testing.T) {
+	tests := []struct {
+		name           string
+		level          Level
+		logFunc        func()
+		expectedOutput string
+		shouldLog      bool
+	}{
+		{
+			name:  "error level does not log info message",
+			level: ErrorLevel,
+			logFunc: func() {
+				Infof("Starting launcher's health check server at port %s", "5680")
+			},
+			shouldLog: false,
+		},
+		{
+			name:  "debug level logs debug message",
+			level: DebugLevel,
+			logFunc: func() {
+				Debug("Initializing Sentry")
+			},
+			expectedOutput: "Initializing Sentry",
+			shouldLog:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origDebug, origInfo, origWarn, origErr := logger.debug, logger.info, logger.warn, logger.err
+
+			t.Cleanup(func() {
+				logger.debug, logger.info, logger.warn, logger.err = origDebug, origInfo, origWarn, origErr
+				logger.level = InfoLevel
+			})
+
+			var buf bytes.Buffer
+			logger.debug = log.New(&buf, "", log.LstdFlags)
+			logger.info = log.New(&buf, "", log.LstdFlags)
+			logger.warn = log.New(&buf, "", log.LstdFlags)
+			logger.err = log.New(&buf, "", log.LstdFlags)
+
+			SetLevel(tt.level)
+			tt.logFunc()
+
+			if tt.shouldLog {
+				assert.Contains(t, buf.String(), tt.expectedOutput)
+			} else {
+				assert.Empty(t, buf.String())
+			}
+		})
+	}
+}

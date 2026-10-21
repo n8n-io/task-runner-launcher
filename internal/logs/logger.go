@@ -161,6 +161,10 @@ func ParseLevel(level string) Level {
 	return InfoLevel
 }
 
+func SetLevel(level Level) {
+	logger.level = level
+}
+
 func Debug(msg string) {
 	logger.Debug(msg)
 }

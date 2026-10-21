@@ -18,6 +18,8 @@ import (
 )
 
 func main() {
+	logs.Init()
+
 	flag.Usage = func() {
 		fmt.Printf("Usage: %s [runner-type(s)]\n", os.Args[0])
 		flag.PrintDefaults()
@@ -36,6 +38,8 @@ func main() {
 		logs.Errorf("Failed to load config: %v", err)
 		os.Exit(1)
 	}
+
+	logs.SetLevel(logs.ParseLevel(launcherConfig.BaseConfig.LogLevel))
 
 	errorreporting.Init(launcherConfig.BaseConfig.Sentry)
 	defer errorreporting.Close()

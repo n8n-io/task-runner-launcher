@@ -31,6 +31,7 @@ func CheckUntilBrokerReady(
 	ctx context.Context,
 	taskBrokerURI string,
 	retryInterval time.Duration,
+	maxRetryInterval time.Duration,
 	logger *logs.Logger,
 ) error {
 	logger.Info("Waiting for task broker to be ready...")
@@ -53,6 +54,7 @@ func CheckUntilBrokerReady(
 		ctx,
 		"readiness-check",
 		retryInterval,
+		maxRetryInterval,
 		logger,
 		healthCheck,
 	); err != nil {

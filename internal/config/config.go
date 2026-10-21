@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"task-runner-launcher/internal/errs"
 	"task-runner-launcher/internal/logs"
 	"time"
@@ -247,6 +248,10 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 		return nil, err
 	}
 
+	if err := validateDefaultEnvKeys(runnerConfigs); err != nil {
+		return nil, err
+	}
+
 	if err := validateEnvKeyConflicts(runnerConfigs); err != nil {
 		return nil, err
 	}
@@ -258,6 +263,18 @@ func readLauncherConfigFile(configPath string, runnerTypes []string) (map[string
 	}
 
 	return runnerConfigs, nil
+}
+
+func validateDefaultEnvKeys(runnerConfigs map[string]*RunnerConfig) error {
+	for runnerType, config := range runnerConfigs {
+		for key := range config.DefaultEnv {
+			if key == "" || strings.ContainsAny(key, "=\x00") {
+				return fmt.Errorf("runner %s: default-env key %q is invalid", runnerType, key)
+			}
+		}
+	}
+
+	return nil
 }
 
 func validateEnvKeyConflicts(runnerConfigs map[string]*RunnerConfig) error {

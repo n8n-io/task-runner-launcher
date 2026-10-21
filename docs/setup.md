@@ -91,6 +91,8 @@ The launcher can pass env vars to task runners in three ways, as specified in th
 
 A key may not appear in both `default-env` and `env-overrides`. `N8N_RUNNERS_AUTH_TOKEN` is never passed to the runner through `default-env`.
 
+A `default-env` key also honours `_FILE`: if the launcher's environment sets `<KEY>_FILE`, the file's contents are passed to the runner, replacing both the default and any value for `<KEY>` from `allowed-env`. If that file cannot be read, the default is used.
+
 Older launcher versions ignore `default-env` without warning, so the runner falls back to its own defaults for those keys.
 
 Exceptionally, these four env vars cannot be disallowed or overridden:

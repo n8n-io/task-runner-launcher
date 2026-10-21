@@ -439,6 +439,37 @@ func TestPrepareRunnerEnv(t *testing.T) {
 	}
 }
 
+func TestPrepareRunnerEnvDefaultEnvFromFile(t *testing.T) {
+	dir := t.TempDir()
+	timeoutFile := dir + "/task-timeout"
+	shutdownFile := dir + "/auto-shutdown-timeout"
+	assert.NoError(t, os.WriteFile(timeoutFile, []byte("120\n"), 0600))
+	assert.NoError(t, os.WriteFile(shutdownFile, []byte("45\n"), 0600))
+
+	os.Clearenv()
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("N8N_RUNNERS_TASK_TIMEOUT_FILE", timeoutFile)
+	t.Setenv("N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT_FILE", shutdownFile)
+
+	baseConfig := &config.BaseConfig{
+		AutoShutdownTimeout: "30",
+		TaskTimeout:         "60",
+		TaskBrokerURI:       "http://localhost:5679",
+	}
+	runnerConfig := &config.RunnerConfig{
+		HealthCheckServerPort: "5681",
+		DefaultEnv: map[string]string{
+			"N8N_RUNNERS_TASK_TIMEOUT":          "10",
+			"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT": "10",
+		},
+	}
+
+	got := PrepareRunnerEnv(baseConfig, runnerConfig, logs.NewLogger(logs.InfoLevel, ""))
+
+	assert.Contains(t, got, "N8N_RUNNERS_TASK_TIMEOUT=120")
+	assert.Contains(t, got, "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT=45")
+}
+
 func TestRunnerPortPassedToEnv(t *testing.T) {
 	tests := []struct {
 		name        string

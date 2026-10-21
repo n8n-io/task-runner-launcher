@@ -8,6 +8,8 @@ import (
 	"strings"
 	"task-runner-launcher/internal/config"
 	"task-runner-launcher/internal/logs"
+
+	"github.com/sethvargo/go-envconfig"
 )
 
 const (
@@ -111,6 +113,30 @@ var requiredRuntimeEnvVars = []string{
 	EnvVarHealthCheckServerPort,
 }
 
+// applyDefaultEnv sets each default-env var on the runner env, unless the launcher's own environment sets it.
+func applyDefaultEnv(runnerEnv []string, defaultEnv map[string]string, logger *logs.Logger) []string {
+	lookuper := config.NewLauncherLookuper(envconfig.OsLookuper())
+
+	for key, value := range defaultEnv {
+		if slices.Contains(requiredRuntimeEnvVars, key) {
+			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
+			continue
+		}
+		// A config must not be able to forward the launcher's auth token to a runner.
+		if key == EnvVarAuthToken {
+			logger.Warnf("Disregarded default-env for launcher-only variable: %s", key)
+			continue
+		}
+		if launcherValue, present := lookuper.Lookup(key); present {
+			value = launcherValue
+		}
+		runnerEnv = Clear(runnerEnv, key)
+		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	return runnerEnv
+}
+
 // PrepareRunnerEnv prepares the environment variables to pass to the runner.
 func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.RunnerConfig, logger *logs.Logger) []string {
 	checkLegacyBehavior(runnerConfig)
@@ -132,22 +158,7 @@ func PrepareRunnerEnv(baseConfig *config.BaseConfig, runnerConfig *config.Runner
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarAutoShutdownTimeout, baseConfig.AutoShutdownTimeout))
 	runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", EnvVarTaskTimeout, baseConfig.TaskTimeout))
 
-	for key, value := range runnerConfig.DefaultEnv {
-		if slices.Contains(requiredRuntimeEnvVars, key) {
-			logger.Warnf("Disregarded default-env for required runtime variable: %s", key)
-			continue
-		}
-		// A config must not be able to forward the launcher's auth token to a runner.
-		if key == EnvVarAuthToken {
-			logger.Warnf("Disregarded default-env for launcher-only variable: %s", key)
-			continue
-		}
-		if launcherValue, present := os.LookupEnv(key); present {
-			value = launcherValue
-		}
-		runnerEnv = Clear(runnerEnv, key)
-		runnerEnv = append(runnerEnv, fmt.Sprintf("%s=%s", key, value))
-	}
+	runnerEnv = applyDefaultEnv(runnerEnv, runnerConfig.DefaultEnv, logger)
 
 	for key, value := range runnerConfig.EnvOverrides {
 		if slices.Contains(requiredRuntimeEnvVars, key) {

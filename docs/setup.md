@@ -73,6 +73,8 @@ On `SIGTERM`/`SIGINT` the launcher forwards the signal to the runner so it can f
 |----------|---------|---------|
 | `N8N_RUNNERS_LAUNCHER_GRACEFUL_SHUTDOWN_TIMEOUT` | runner grace + 2 x margin (= `50`) | Seconds the launcher waits for the runner to drain and exit before force-killing it. Derived as `N8N_RUNNERS_GRACEFUL_SHUTDOWN_TIMEOUT + 2 x N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN`, so raising either raises this automatically; set it to override. |
 | `N8N_RUNNERS_LAUNCHER_BROKER_READINESS_POLL_INTERVAL_MS` | `5000` | Milliseconds between task broker readiness checks. Values below `100` are not valid. |
+| `N8N_RUNNERS_LAUNCHER_RECONNECT_INTERVAL_MS` | `5000` | Milliseconds to wait before the first retry after a broker dial failure; doubles on each further consecutive failure, up to `N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS`. The streak resets after a successful handshake or a connection that lasts at least 60 s. Values below `100` are not valid. |
+| `N8N_RUNNERS_LAUNCHER_RETRY_MAX_INTERVAL_MS` | `30000` | Milliseconds ceiling for the growing retry delay on both the broker readiness check and the broker dial retry. Setting it below the relevant base interval (the reconnect interval or the readiness poll interval) keeps the delay flat at that base. Values below `100` are not valid. |
 
 The runner force-exits itself at `grace + margin`; the launcher waits one further margin (`grace + 2 x margin`) so that self-exit happens first. Set `N8N_RUNNERS_SHUTDOWN_FORCE_KILL_MARGIN` (default `10`) on the runner's environment to tune the gap.
 

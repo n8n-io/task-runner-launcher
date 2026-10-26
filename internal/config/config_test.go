@@ -247,6 +247,61 @@ func TestConfigFileErrors(t *testing.T) {
 				EnvVarRetryMaxInterval:        "9223372036855",
 			},
 		},
+		{
+			name: "key in both default-env and env-overrides",
+			configContent: `{
+				"task-runners": [{
+					"runner-type": "javascript",
+					"workdir": "/test/dir",
+					"command": "node",
+					"args": ["/test/start.js"],
+					"default-env": {"NODE_ENV": "production"},
+					"env-overrides": {"NODE_ENV": "development"}
+				}]
+			}`,
+			expectedError: "runner javascript: NODE_ENV is set in both default-env and env-overrides",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+			},
+		},
+		{
+			name: "default-env key contains equals sign",
+			configContent: `{
+				"task-runners": [{
+					"runner-type": "javascript",
+					"workdir": "/test/dir",
+					"command": "node",
+					"args": ["/test/start.js"],
+					"default-env": {"N8N_RUNNERS_TASK_BROKER_URI=http://evil:5679#": "x"}
+				}]
+			}`,
+			expectedError: "runner javascript: default-env key \"N8N_RUNNERS_TASK_BROKER_URI=http://evil:5679#\" is invalid",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+			},
+		},
+		{
+			name: "default-env key is empty",
+			configContent: `{
+				"task-runners": [{
+					"runner-type": "javascript",
+					"workdir": "/test/dir",
+					"command": "node",
+					"args": ["/test/start.js"],
+					"default-env": {"": "x"}
+				}]
+			}`,
+			expectedError: "runner javascript: default-env key \"\" is invalid",
+			envVars: map[string]string{
+				"N8N_RUNNERS_AUTH_TOKEN":      "test-token",
+				"N8N_RUNNERS_TASK_BROKER_URI": "http://localhost:5679",
+				"N8N_RUNNERS_CONFIG_PATH":     testConfigPath,
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -22,8 +22,3 @@ linters:
     presets:
       - comments
       - std-error-handling
-    rules:
-      - path: internal/http/
-        linters:
-          - revive
-        text: "var-naming: avoid package names that conflict with Go standard library package names"

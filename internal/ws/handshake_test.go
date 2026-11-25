@@ -385,8 +385,8 @@ func TestHandshakeCallsOnRegisteredBeforeOfferAccepted(t *testing.T) {
 	}
 
 	select {
-	case <-done:
-		t.Fatal("Handshake returned before the offer was accepted")
+	case err := <-done:
+		t.Fatalf("Handshake returned before the offer was accepted: %v", err)
 	default:
 	}
 
@@ -439,8 +439,8 @@ func TestHandshakeStaysAvailableThenStopsOnGraceExpiry(t *testing.T) {
 
 	// Must still be waiting right after cancellation (within the grace window).
 	select {
-	case <-done:
-		t.Fatal("Handshake returned immediately on cancellation; it should stay available during the grace period")
+	case err := <-done:
+		t.Fatalf("Handshake returned immediately on cancellation; it should stay available during the grace period: %v", err)
 	case <-time.After(grace / 2):
 	}
 

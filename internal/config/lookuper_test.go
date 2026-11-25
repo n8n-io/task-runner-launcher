@@ -22,7 +22,7 @@ func TestFileLookuper(t *testing.T) {
 	}{
 		{
 			name: "reads from _FILE when it exists",
-			envVars: map[string]string{
+			envVars: map[string]string{ //nolint:gosec // G101: a fixture file path, not a credential
 				"AUTH_TOKEN_FILE": "/tmp/secret.txt",
 			},
 			fileContent: map[string]string{
@@ -34,7 +34,7 @@ func TestFileLookuper(t *testing.T) {
 		},
 		{
 			name: "trims trailing newlines from file content",
-			envVars: map[string]string{
+			envVars: map[string]string{ //nolint:gosec // G101: a fixture file path, not a credential
 				"AUTH_TOKEN_FILE": "/tmp/secret.txt",
 			},
 			fileContent: map[string]string{
@@ -46,7 +46,7 @@ func TestFileLookuper(t *testing.T) {
 		},
 		{
 			name: "trims multiple trailing newlines",
-			envVars: map[string]string{
+			envVars: map[string]string{ //nolint:gosec // G101: a fixture file path, not a credential
 				"AUTH_TOKEN_FILE": "/tmp/secret.txt",
 			},
 			fileContent: map[string]string{
@@ -79,7 +79,7 @@ func TestFileLookuper(t *testing.T) {
 		},
 		{
 			name: "_FILE takes precedence over direct env var",
-			envVars: map[string]string{
+			envVars: map[string]string{ //nolint:gosec // G101: a fixture file path, not a credential
 				"AUTH_TOKEN":      "direct-value",
 				"AUTH_TOKEN_FILE": "/tmp/secret.txt",
 			},

@@ -1,0 +1,32 @@
+internal/ws/handshake_test.go
+  s_764387844935d6::t_c2c1f6128b7074 388-389,442-443
+.github/workflows/release.yml
+  s_764387844935d6::t_757f47a5c1094f 24
+internal/config/lookuper_test.go
+  s_764387844935d6::t_362a9a1e68fd77 82
+  s_764387844935d6::t_c2c1f6128b7074 25,37,49
+.github/workflows/checks.yml
+  s_764387844935d6::t_757f47a5c1094f 11
+go.mod
+  s_764387844935d6::t_757f47a5c1094f 3
+internal/http/fetch_grant_token_test.go
+  s_764387844935d6::t_362a9a1e68fd77 65
+internal/http/manage_runner_health_test.go
+  s_764387844935d6::t_c2c1f6128b7074 182-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b5f1ccac5e42f29b7776f61281c2cb5cdf90b8fe",
+  "prompts": {},
+  "sessions": {
+    "s_764387844935d6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3a51766a-714a-42df-8706-9b17f6d8607a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "Lorent Lempereur <lorent.lempereur@n8n.io>"
+    }
+  }
+}

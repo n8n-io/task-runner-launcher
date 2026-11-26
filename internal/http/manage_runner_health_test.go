@@ -179,8 +179,8 @@ func TestManageRunnerHealth(t *testing.T) {
 
 			// check if monitored process was killed or kept as expected
 			select {
-			case <-done:
-				assert.True(t, tt.expectKill, "Process was killed but should have been left running")
+			case err := <-done:
+				assert.True(t, tt.expectKill, "Process was killed but should have been left running: %v", err)
 
 			case <-time.After(100 * time.Millisecond):
 				if tt.expectKill {

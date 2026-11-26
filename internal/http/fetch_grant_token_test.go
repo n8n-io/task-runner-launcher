@@ -62,7 +62,7 @@ func TestFetchGrantToken(t *testing.T) {
 			wantErr:       true,
 			errorContains: "status code 500",
 		},
-		{
+		{ //nolint:gosec // G101: a test token, not a credential
 			name:      "verify request body",
 			authToken: "test-auth-token",
 			serverFn: func(w http.ResponseWriter, r *http.Request, t *testing.T) {
